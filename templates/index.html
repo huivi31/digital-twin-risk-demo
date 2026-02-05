@@ -1,0 +1,4249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>数字孪生风控风洞 | Digital Twin Risk Wind Tunnel v2</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #00050a;
+      color: #e0f8ff;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+
+    /* 顶部栏 - 风洞控制台风格 */
+    .top-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 56px;
+      background: linear-gradient(180deg, rgba(0,20,40,0.95) 0%, rgba(0,10,20,0.9) 100%);
+      border-bottom: 2px solid rgba(0,200,255,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 4px 30px rgba(0,150,255,0.2);
+    }
+    .logo { display: flex; align-items: center; gap: 14px; }
+    .logo-icon {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #00d4ff, #0099ff);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 25px rgba(0,200,255,0.6), inset 0 0 15px rgba(255,255,255,0.3);
+      border: 1px solid rgba(0,255,255,0.3);
+    }
+    .logo h1 {
+      font-size: 15px; font-weight: 600; letter-spacing: 4px;
+      background: linear-gradient(90deg, #00d4ff 0%, #ffffff 50%, #00d4ff 100%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 3s linear infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .subtitle {
+      font-size: 10px;
+      color: rgba(0,200,255,0.7);
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+    .stats-bar { display: flex; gap: 32px; }
+    .stat { text-align: center; position: relative; }
+    .stat::before {
+      content: '';
+      position: absolute;
+      top: -5px; left: 50%;
+      transform: translateX(-50%);
+      width: 6px; height: 6px;
+      background: #00d4ff;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #00d4ff;
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .stat-value { 
+      font-size: 24px; font-weight: 300; color: #00d4ff; 
+      text-shadow: 0 0 20px rgba(0,200,255,0.8);
+      font-family: 'SF Mono', Monaco, monospace;
+      letter-spacing: 1px;
+    }
+    .stat-label { font-size: 9px; color: #4a8aaa; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px; }
+
+    /* 左侧筛选面板 */
+    .filter-panel {
+      position: fixed;
+      top: 70px; left: 12px;
+      width: 160px;
+      background: rgba(0,15,30,0.9);
+      border: 1px solid rgba(0,200,255,0.2);
+      border-radius: 12px;
+      padding: 14px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(0,200,255,0.1);
+    }
+    .filter-title {
+      font-size: 10px; color: #4a8aaa;
+      text-transform: uppercase; letter-spacing: 2px;
+      margin-bottom: 12px; padding-bottom: 10px;
+      border-bottom: 1px solid rgba(0,200,255,0.15);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .filter-title::before {
+      content: '◆';
+      color: #00d4ff;
+      font-size: 8px;
+    }
+    .filter-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 8px;
+      cursor: pointer; font-size: 11px; transition: all 0.3s;
+      border: 1px solid transparent;
+    }
+    .filter-item:hover { 
+      background: rgba(0,200,255,0.1); 
+      border-color: rgba(0,200,255,0.2);
+    }
+    .filter-item.active { 
+      background: rgba(0,200,255,0.2); 
+      color: #00d4ff;
+      border-color: rgba(0,200,255,0.4);
+      text-shadow: 0 0 10px rgba(0,200,255,0.5);
+    }
+    .filter-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+    .filter-count { margin-left: auto; font-size: 9px; color: #4a8aaa; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 10px; }
+
+    /* 右侧控制面板 */
+    .control-panel {
+      position: fixed;
+      top: 70px; right: 12px;
+      width: 320px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+      background: rgba(0,15,30,0.9);
+      border: 1px solid rgba(0,200,255,0.2);
+      border-radius: 12px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(0,200,255,0.1);
+    }
+    .panel-section {
+      padding: 16px;
+      border-bottom: 1px solid rgba(0,200,255,0.1);
+    }
+    .panel-section:last-child { border-bottom: none; }
+    .section-title {
+      font-size: 10px; color: #4a8aaa;
+      text-transform: uppercase; letter-spacing: 2px;
+      margin-bottom: 12px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-title::before {
+      content: '▸';
+      color: #00d4ff;
+      font-size: 12px;
+    }
+
+    /* 节点信息卡 */
+    .node-info {
+      background: linear-gradient(135deg, rgba(0,60,120,0.3), rgba(0,30,60,0.2));
+      border: 1px solid rgba(0,200,255,0.25);
+      border-radius: 12px;
+      padding: 16px;
+      backdrop-filter: blur(10px);
+      position: relative;
+      overflow: hidden;
+    }
+    .node-info::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #00d4ff, transparent);
+    }
+    .node-name { font-size: 18px; font-weight: 600; margin-bottom: 6px; text-shadow: 0 0 15px rgba(255,255,255,0.3); }
+    .node-category { 
+      font-size: 10px; color: #00d4ff; margin-bottom: 12px;
+      display: inline-block;
+      padding: 4px 12px;
+      background: rgba(0,200,255,0.15);
+      border: 1px solid rgba(0,200,255,0.3);
+      border-radius: 20px;
+      text-shadow: 0 0 10px rgba(0,200,255,0.5);
+      letter-spacing: 1px;
+    }
+    .node-desc { font-size: 12px; color: #8ab4cc; line-height: 1.6; }
+    .node-relations {
+      margin-top: 14px; padding-top: 14px;
+      border-top: 1px solid rgba(0,200,255,0.15);
+      max-height: 120px; overflow-y: auto;
+    }
+    .node-memory {
+      margin-top: 12px; padding-top: 12px;
+      border-top: 1px solid rgba(0,200,255,0.12);
+      max-height: 90px; overflow-y: auto;
+      font-size: 11px; color: #7cb8d4;
+    }
+    .memory-item { padding: 4px 0; }
+    .relation-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: #7cb8d4; padding: 4px 0;
+    }
+    .relation-type {
+      padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 600;
+    }
+    .relation-type.follow { background: rgba(0,200,255,0.25); color: #00d4ff; }
+    .relation-type.hate { background: rgba(255,80,80,0.25); color: #ff6b6b; }
+    .relation-type.ally { background: rgba(255,200,0,0.25); color: #ffc800; }
+    .relation-type.collaborate { background: rgba(0,255,150,0.25); color: #00ff88; }
+    .relation-type.command { background: rgba(255,100,200,0.25); color: #ff64c8; }
+    .relation-type.influence { background: rgba(255,150,0,0.25); color: #ff9600; }
+    .relation-type.target { background: rgba(255,50,50,0.35); color: #ff4444; }
+    .relation-type.block { background: rgba(0,80,170,0.35); color: #5aa8ff; }
+    .relation-type.unblock { background: rgba(0,170,221,0.25); color: #00d4ff; }
+    .relation-type.report { background: rgba(0,120,255,0.25); color: #66b3ff; }
+
+    /* 表单 */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+      display: block; font-size: 10px; color: #4a8aaa; margin-bottom: 6px; letter-spacing: 1px;
+    }
+    .form-group textarea, .form-group select {
+      width: 100%;
+      background: rgba(0,20,40,0.8);
+      border: 1px solid rgba(0,200,255,0.25);
+      border-radius: 8px; padding: 12px 14px;
+      color: #e0f8ff; font-size: 12px; outline: none;
+      transition: all 0.3s;
+      font-family: inherit;
+    }
+    .form-group textarea { min-height: 60px; resize: vertical; }
+    .form-group textarea:focus, .form-group select:focus { 
+      border-color: #00d4ff;
+      box-shadow: 0 0 20px rgba(0,200,255,0.25), inset 0 0 15px rgba(0,200,255,0.1);
+    }
+
+    /* 按钮 */
+    .btn {
+      padding: 12px 20px; border: none; border-radius: 8px;
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.3s;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0088cc, #00ccff);
+      color: white; width: 100%;
+      box-shadow: 0 4px 25px rgba(0,150,255,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+      border: 1px solid rgba(0,255,255,0.3);
+    }
+    .btn-primary:hover { 
+      box-shadow: 0 6px 35px rgba(0,200,255,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+      transform: translateY(-2px);
+    }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+    .btn-secondary {
+      background: rgba(0,60,120,0.4);
+      border: 1px solid rgba(0,200,255,0.3);
+      color: #7cb8d4; flex: 1;
+    }
+    .btn-secondary:hover { background: rgba(0,100,180,0.5); border-color: #00d4ff; color: #00d4ff; }
+    .btn-report {
+      background: linear-gradient(135deg, #ff7700, #ffaa00);
+      color: white; flex: 1;
+      box-shadow: 0 4px 20px rgba(255,150,0,0.4);
+      border: 1px solid rgba(255,200,100,0.3);
+    }
+
+    /* 结果区 */
+    .result-area {
+      background: rgba(0,25,50,0.5);
+      border: 1px solid rgba(0,200,255,0.2);
+      border-radius: 10px; padding: 14px;
+      max-height: 140px; overflow-y: auto;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 11px; line-height: 1.6; display: none;
+    }
+    .result-area.show { display: block; }
+    .result-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
+    .risk-badge {
+      padding: 5px 14px; border-radius: 15px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 2px;
+    }
+    .risk-badge.safe { background: rgba(0,255,150,0.2); color: #00ff88; border: 1px solid rgba(0,255,150,0.4); box-shadow: 0 0 15px rgba(0,255,150,0.3); }
+    .risk-badge.danger { background: rgba(255,80,80,0.2); color: #ff6b6b; border: 1px solid rgba(255,100,100,0.4); box-shadow: 0 0 15px rgba(255,100,100,0.3); }
+
+    /* 日志 */
+    .log-area {
+      max-height: 110px; overflow-y: auto;
+      font-family: 'SF Mono', Monaco, monospace; font-size: 10px;
+      background: rgba(0,10,20,0.5);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .log-item { padding: 3px 0; color: #5a8aaa; }
+    .log-item.success { color: #00ff88; text-shadow: 0 0 10px rgba(0,255,150,0.5); }
+    .log-item.error { color: #ff6b6b; text-shadow: 0 0 10px rgba(255,100,100,0.5); }
+    .log-item.warning { color: #ffaa00; text-shadow: 0 0 10px rgba(255,170,0,0.5); }
+    .log-item.info { color: #00d4ff; text-shadow: 0 0 10px rgba(0,200,255,0.5); }
+    .log-time { color: #3a5a7a; margin-right: 10px; }
+
+    /* 节点详情浮窗 */
+    .node-tooltip {
+      position: fixed;
+      background: rgba(0,20,40,0.95);
+      border: 1px solid rgba(0,200,255,0.4);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 13px;
+      z-index: 200;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      max-width: 240px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(0,200,255,0.2);
+    }
+    .node-tooltip.show { opacity: 1; }
+    .node-tooltip .name { font-weight: 700; margin-bottom: 6px; color: #fff; font-size: 15px; }
+    .node-tooltip .category { font-size: 11px; color: #00d4ff; margin-bottom: 10px; text-shadow: 0 0 10px rgba(0,200,255,0.5); }
+    .node-tooltip .desc { font-size: 12px; color: #8ab4cc; line-height: 1.5; }
+
+    /* 策略报告弹窗 */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,5,10,0.92);
+      z-index: 500; display: none;
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(10px);
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: linear-gradient(135deg, #001525, #003050);
+      border: 1px solid rgba(0,200,255,0.35);
+      border-radius: 16px;
+      width: 90%; max-width: 900px;
+      max-height: 85vh; overflow: hidden;
+      box-shadow: 0 40px 120px rgba(0,100,200,0.4), 0 0 60px rgba(0,200,255,0.2);
+    }
+    .modal-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid rgba(0,200,255,0.25);
+      display: flex; justify-content: space-between; align-items: center;
+      background: linear-gradient(90deg, rgba(0,200,255,0.1), transparent);
+    }
+    .modal-title {
+      font-size: 22px; font-weight: 600;
+      background: linear-gradient(90deg, #00d4ff, #ffaa00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .modal-close {
+      width: 36px; height: 36px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 10px;
+      color: #8ab4cc; font-size: 22px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .modal-close:hover { background: rgba(255,100,100,0.3); color: #ff6b6b; border-color: rgba(255,100,100,0.5); }
+    .modal-body {
+      padding: 28px; max-height: calc(85vh - 80px); overflow-y: auto;
+    }
+    
+    /* 报告内容 */
+    .report-section {
+      margin-bottom: 28px;
+      padding: 22px;
+      background: rgba(0,40,80,0.25);
+      border-radius: 14px;
+      border-left: 4px solid #00d4ff;
+    }
+    .report-section.warning { border-left-color: #ffaa00; }
+    .report-section.danger { border-left-color: #ff4444; }
+    .report-section.success { border-left-color: #00ff88; }
+    .report-section-title {
+      font-size: 16px; font-weight: 600; margin-bottom: 18px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .report-section-title .icon { font-size: 24px; }
+    .report-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+    }
+    .report-stat {
+      background: rgba(0,25,50,0.5);
+      border: 1px solid rgba(0,200,255,0.15);
+      border-radius: 12px; padding: 18px; text-align: center;
+    }
+    .report-stat-value { font-size: 36px; font-weight: 300; color: #00d4ff; text-shadow: 0 0 20px rgba(0,200,255,0.5); }
+    .report-stat-label { font-size: 10px; color: #4a8aaa; margin-top: 8px; text-transform: uppercase; letter-spacing: 2px; }
+    .report-list { list-style: none; }
+    .report-list li {
+      padding: 14px 18px; margin-bottom: 10px;
+      background: rgba(0,25,50,0.4);
+      border: 1px solid rgba(0,200,255,0.1);
+      border-radius: 10px; font-size: 13px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .report-list li .priority {
+      padding: 5px 14px; border-radius: 8px; font-size: 11px; font-weight: 700;
+    }
+    .priority.high { background: rgba(255,80,80,0.3); color: #ff6b6b; }
+    .priority.medium { background: rgba(255,180,0,0.3); color: #ffcc00; }
+    .priority.low { background: rgba(0,200,255,0.3); color: #00d4ff; }
+    .report-chart {
+      height: 170px; background: rgba(0,25,50,0.35);
+      border-radius: 12px; padding: 22px;
+      display: flex; align-items: flex-end; gap: 14px;
+    }
+    .chart-bar {
+      flex: 1; background: linear-gradient(to top, #0088cc, #00d4ff);
+      border-radius: 8px 8px 0 0; transition: height 0.5s;
+      position: relative;
+      box-shadow: 0 0 20px rgba(0,200,255,0.3);
+    }
+    .chart-bar::after {
+      content: attr(data-label);
+      position: absolute; bottom: -26px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px; color: #4a8aaa; white-space: nowrap;
+    }
+    .chart-bar.danger { background: linear-gradient(to top, #cc0000, #ff6b6b); box-shadow: 0 0 20px rgba(255,100,100,0.3); }
+
+    /* 图例 */
+    .legend {
+      position: fixed;
+      bottom: 18px; left: 18px;
+      background: rgba(0,15,30,0.9);
+      border: 1px solid rgba(0,200,255,0.2);
+      border-radius: 12px;
+      padding: 16px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+    }
+    .legend-title { font-size: 10px; color: #4a8aaa; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 2px; }
+    .legend-items { display: flex; flex-wrap: wrap; gap: 16px; }
+    .legend-item { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #8ab4cc; }
+    .legend-line { width: 24px; height: 3px; border-radius: 2px; box-shadow: 0 0 8px currentColor; }
+
+    /* 3D 控制提示 */
+    .controls-hint {
+      position: fixed;
+      bottom: 130px; left: 18px;
+      background: rgba(0,15,30,0.9);
+      border: 1px solid rgba(0,200,255,0.2);
+      border-radius: 12px;
+      padding: 12px 16px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      font-size: 11px; color: #4a8aaa;
+      max-width: 220px;
+      text-align: left;
+    }
+    .controls-hint span { color: #00d4ff; text-shadow: 0 0 10px rgba(0,200,255,0.5); }
+
+    /* 风洞状态指示器 */
+    .wind-tunnel-status {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,15,30,0.9);
+      border: 1px solid rgba(0,200,255,0.2);
+      border-radius: 20px;
+      padding: 10px 24px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #4a8aaa;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00ff88;
+      box-shadow: 0 0 10px #00ff88;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0,40,80,0.3); }
+    ::-webkit-scrollbar-thumb { background: rgba(0,200,255,0.4); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+
+  <!-- 顶部栏 -->
+  <div class="top-bar">
+    <div class="logo">
+      <div class="logo-icon">🌐</div>
+      <div>
+        <h1>RISK WIND TUNNEL</h1>
+        <div class="subtitle">数字孪生风控风洞系统</div>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-value" id="nodeCount">0</div>
+        <div class="stat-label">Agents</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="edgeCount">0</div>
+        <div class="stat-label">Links</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="testCount">0</div>
+        <div class="stat-label">Tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="riskCount">0</div>
+        <div class="stat-label">Risks</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="safeRate">--</div>
+        <div class="stat-label">Safe%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 左侧筛选 -->
+  <div class="filter-panel">
+    <div class="filter-title">User Categories</div>
+    <div id="filterList"></div>
+  </div>
+
+  <!-- 右侧控制面板 -->
+  <div class="control-panel">
+    <div class="panel-section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>📋 角色配置 / Agent Config</span>
+        <button class="btn btn-secondary" id="editAgentBtn" style="padding:4px 8px;font-size:9px;display:none;">✏️ 编辑</button>
+      </div>
+      
+      <!-- 查看模式 -->
+      <div class="node-info" id="nodeInfoView">
+        <div class="node-name" id="nodeName">点击节点选择</div>
+        <div class="node-category" id="nodeCategory">-</div>
+        <div class="node-desc" id="nodeDesc">在3D球体中点击任意节点查看和编辑角色配置</div>
+        
+        <div id="agentStats" style="margin-top:12px;display:none;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;color:#4a8aaa;">
+            <div>🎯 技巧: <span id="statTechniques" style="color:#00d4ff;">-</span></div>
+            <div>🌐 影响: <span id="statInfluence" style="color:#00d4ff;">-</span></div>
+            <div>🔒 隐蔽: <span id="statStealth" style="color:#00d4ff;">-</span></div>
+            <div>⭐ 可信: <span id="statCredibility" style="color:#00d4ff;">-</span></div>
+          </div>
+        </div>
+        
+        <div class="node-relations" id="nodeRelations" style="max-height:60px;font-size:10px;"></div>
+        <div class="node-memory" id="nodeMemory" style="max-height:50px;font-size:10px;"></div>
+      </div>
+      
+      <!-- 编辑模式 -->
+      <div id="nodeInfoEdit" style="display:none;max-height:calc(100vh - 200px);overflow-y:auto;">
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">角色名称</label>
+          <input type="text" id="editName" style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">角色类别</label>
+          <select id="editCategory" style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+            <option value="文字变形专家">文字变形专家</option>
+            <option value="隐喻暗示专家">隐喻暗示专家</option>
+            <option value="多语言专家">多语言专家</option>
+            <option value="方言俚语专家">方言俚语专家</option>
+            <option value="语境包装专家">语境包装专家</option>
+            <option value="格式利用专家">格式利用专家</option>
+            <option value="综合高手">综合高手</option>
+          </select>
+        </div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="form-group">
+            <label style="font-size:10px;">技能等级 (1-5)</label>
+            <input type="number" id="editSkillLevel" min="1" max="5" step="1" style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+          </div>
+          <div class="form-group">
+            <label style="font-size:10px;">隐蔽性 (0-1)</label>
+            <input type="number" id="editStealth" min="0" max="1" step="0.05" style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+          </div>
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">掌握技巧 (逗号分隔)</label>
+          <input type="text" id="editTechniques" placeholder="技巧1,技巧2,技巧3" style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">角色描述</label>
+          <textarea id="editDesc" rows="2" style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        </div>
+        
+        <!-- 新增：详细Prompt系统字段 -->
+        <div style="border-top:1px solid rgba(0,200,255,0.2);margin:12px 0 8px;padding-top:10px;">
+          <div style="font-size:10px;color:#00d4ff;margin-bottom:8px;letter-spacing:1px;">📋 详细Prompt系统</div>
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">🎭 角色背景</label>
+          <textarea id="editBackground" rows="3" placeholder="角色的背景故事和人设..." style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">💪 核心能力</label>
+          <textarea id="editCoreAbility" rows="2" placeholder="角色的核心专长和能力..." style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">⚔️ 攻击策略 (每行一条)</label>
+          <textarea id="editAttackStrategy" rows="5" placeholder="1. 策略一...&#10;2. 策略二...&#10;3. 策略三..." style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">🔄 变体生成指令</label>
+          <textarea id="editVariantInstructions" rows="3" placeholder="生成绕过内容的步骤说明..." style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">🧠 思考链 (Chain of Thought)</label>
+          <input type="text" id="editChainOfThought" placeholder="步骤1→步骤2→步骤3→..." style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;">
+        </div>
+        
+        <div class="form-group" style="margin-bottom:8px;">
+          <label style="font-size:10px;">📝 输出要求</label>
+          <textarea id="editOutputRequirements" rows="2" placeholder="对生成内容的质量要求..." style="width:100%;background:rgba(0,20,40,0.8);border:1px solid rgba(0,200,255,0.25);border-radius:6px;padding:6px 8px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        </div>
+        
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" id="saveAgentBtn" style="padding:8px 12px;font-size:11px;">💾 保存配置</button>
+          <button class="btn btn-secondary" id="cancelEditBtn" style="padding:8px 12px;font-size:11px;">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新的测试流程面板 -->
+    <div class="panel-section" style="background: linear-gradient(135deg, rgba(0,40,60,0.95), rgba(0,20,40,0.95)); border: 1px solid rgba(0,200,255,0.4);">
+      <div class="section-title" style="color:#00ffaa;">🎯 对抗测试流程</div>
+      
+      <!-- 步骤1: 输入主题 -->
+      <div style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #00d4ff;">
+        <div style="font-size:11px; color:#00d4ff; margin-bottom:6px; font-weight:600;">
+          STEP 1️⃣ 设定测试主题
+        </div>
+        <input type="text" id="testTopic" placeholder="输入主题，如：领导人、六四、疫情、台湾..." 
+               style="width:100%;background:rgba(0,20,40,0.9);border:1px solid rgba(0,200,255,0.4);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:12px;">
+        <div style="font-size:9px; color:#5a8aaa; margin-top:4px;">
+          💡 外围Agent将围绕此主题发帖，但不知道具体规则
+        </div>
+      </div>
+      
+      <!-- 步骤2: 配置规则 -->
+      <div style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #ffaa00;">
+        <div style="font-size:11px; color:#ffaa00; margin-bottom:6px; font-weight:600;">
+          STEP 2️⃣ 中心Agent规则 <span style="color:#ff6b6b;">(仅中心Agent可见)</span>
+        </div>
+        <textarea id="rulesText" placeholder="每行一条规则，例如：&#10;禁止讨论国家领导人&#10;禁止涉及六四事件&#10;禁止传播政治谣言" 
+                  style="width:100%;min-height:60px;background:rgba(0,20,40,0.9);border:1px solid rgba(255,170,0,0.4);border-radius:6px;padding:8px 10px;color:#e0f8ff;font-size:11px;resize:vertical;"></textarea>
+        <div class="btn-group" style="margin-top:6px;">
+          <button class="btn btn-secondary" id="applyRulesBtn" style="padding:6px 12px;font-size:10px;border-color:#ffaa00;color:#ffaa00;">
+            🔒 应用规则到中心Agent
+          </button>
+        </div>
+        <div id="rulesStatus" style="font-size:10px;color:#5a8aaa;margin-top:4px;">未加载规则</div>
+      </div>
+      
+      <!-- 步骤3: 启动测试 -->
+      <div style="margin-bottom:12px; padding:10px; background:rgba(0,30,50,0.8); border-radius:8px; border-left:3px solid #00ff88;">
+        <div style="font-size:11px; color:#00ff88; margin-bottom:6px; font-weight:600;">
+          STEP 3️⃣ 启动对抗测试
+        </div>
+        <div style="font-size:9px; color:#5a8aaa; margin-bottom:8px;">
+          流程：外围Agent发帖 → 中心Agent检测 → 统计绕过率 → 迭代优化
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="runSingleTestBtn" style="padding:8px 14px;font-size:11px;background:linear-gradient(135deg, #0066aa, #00aaff);">
+            🎲 单Agent测试
+          </button>
+          <button class="btn btn-primary" id="runBatchTestBtn" style="padding:8px 14px;font-size:11px;background:linear-gradient(135deg, #00aa66, #00ff88);">
+            🚀 全员对抗
+          </button>
+        </div>
+        <div class="btn-group" style="margin-top:6px;">
+          <button class="btn btn-secondary" id="runIterateBtn" style="padding:6px 12px;font-size:10px;">
+            🔄 迭代学习
+          </button>
+          <button class="btn btn-secondary" id="runCollaborateBtn" style="padding:6px 12px;font-size:10px;">
+            🤝 协作攻击
+          </button>
+        </div>
+      </div>
+      
+      <!-- 测试进度 -->
+      <div id="testProgress" style="display:none; padding:8px; background:rgba(0,50,30,0.5); border-radius:6px; border:1px solid rgba(0,255,136,0.3);">
+        <div style="font-size:10px; color:#00ff88; margin-bottom:4px;">⏳ 测试进行中...</div>
+        <div id="testProgressBar" style="height:4px; background:rgba(0,100,50,0.5); border-radius:2px; overflow:hidden;">
+          <div id="testProgressFill" style="height:100%; width:0%; background:linear-gradient(90deg, #00ff88, #00ffaa); transition:width 0.3s;"></div>
+        </div>
+        <div id="testProgressText" style="font-size:9px; color:#5a8aaa; margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">⚙️ 高级配置</div>
+      <div class="form-group">
+        <label>社区规模 / 变体数量</label>
+        <select id="variantCount">
+          <option value="2">2x</option>
+          <option value="3">3x</option>
+          <option value="4" selected>4x</option>
+          <option value="5">5x</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>关系密度 / 每节点额外关系</label>
+        <select id="edgeDensity">
+          <option value="1">低</option>
+          <option value="2" selected>中</option>
+          <option value="3">高</option>
+          <option value="4">很高</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="rebuildBtn">↻ 重建社区</button>
+        <button class="btn btn-secondary" id="resetBtn">重置视图</button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">📊 测试结果</div>
+      <div class="result-area" id="resultArea">
+        <div class="result-header">
+          <span>风控分析结果</span>
+          <span class="risk-badge" id="riskBadge"></span>
+        </div>
+        <pre id="resultContent"></pre>
+      </div>
+      <button class="btn btn-report" id="viewReportBtn" style="display:none;margin-top:10px;width:100%;">
+        📊 查看详细报告
+      </button>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">System Log</div>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+
+  <!-- 图例 -->
+  <div class="legend">
+    <div class="legend-title">Multi-Agent System</div>
+    <div class="legend-items">
+      <div class="legend-item"><div class="legend-line" style="background:#00ffff; box-shadow: 0 0 15px #00ffff;"></div><span style="color:#00ffff;font-weight:600;">中心质检Agent</span></div>
+      <div class="legend-item"><div class="legend-line" style="background:#00d4ff;"></div>外围攻击Agent</div>
+      <div class="legend-item"><div class="legend-line" style="background:#335566; opacity:0.6;"></div><span style="color:#5a8aaa;">可配置空位</span></div>
+      <div class="legend-item"><div class="legend-line" style="background:#00ff88;"></div>技巧共享</div>
+      <div class="legend-item"><div class="legend-line" style="background:#ffaa00;"></div>迭代优化</div>
+    </div>
+  </div>
+
+  <!-- 风洞状态 -->
+  <div class="wind-tunnel-status">
+    <div class="status-item">
+      <div class="status-dot"></div>
+      <span>对抗系统运行中</span>
+    </div>
+    <div class="status-item">
+      <span>攻击Agent: <strong id="simUsers">26</strong></span>
+    </div>
+    <div class="status-item">
+      <span>中心质检Agent: <strong>1</strong></span>
+    </div>
+  </div>
+
+  <!-- 控制提示 -->
+  <div class="controls-hint">
+    <span>拖拽</span> 旋转球体 | <span>滚轮/双指</span> 缩放 | <span>点击</span> 选择Agent<br>
+    <span style="color:#00ffff;">青色</span>=中心质检Agent | <span style="color:#00d4ff;">蓝色</span>=外围攻击Agent
+  </div>
+
+  <!-- 节点浮窗 -->
+  <div class="node-tooltip" id="tooltip">
+    <div class="name" id="tooltipName"></div>
+    <div class="category" id="tooltipCategory"></div>
+    <div class="desc" id="tooltipDesc"></div>
+  </div>
+
+  <!-- 策略报告弹窗 -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">📊 风控策略优化报告</div>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div class="modal-body" id="reportContent"></div>
+    </div>
+  </div>
+
+  <script>
+    // ========== 数据 ==========
+    const personas = {{ personas | tojson }};
+    let relationsData = {{ relations | tojson }};
+    const communityConfig = {{ community_config | tojson }} || {};
+    
+    let nodesData = [];
+    let edgesData = [];
+    let selectedNode = null;
+    let testResults = [];
+    let stats = { tests: 0, risks: 0 };
+    let simulationTimer = null;
+    let simulationRunning = false;
+    let currentFilter = 'all';
+    
+    // Sci-Fi 蓝调色板 - 统一科技蓝风格
+    const categoryColors = {
+      '正常用户': 0x00d4ff,
+      '边缘表达': 0x00a0ff,
+      '风险信号': 0x0088ff,
+      '对抗测试': 0x0070ff,
+      '监督审查': 0x00b0ff,
+      // 兼容旧类别（保留以避免历史数据报错）
+      '青少年': 0x00d4ff, '键政': 0x0088ff, '攻击者': 0x0066cc,
+      '水军': 0x0099ff, '灰黑产': 0x0055ff, '情感': 0x00aaff,
+      '学术': 0x0077ff, '正常': 0x0044aa, '边缘': 0x00bbff, '国际': 0x0066ff
+    };
+    
+    const relationColors = {
+      'follow': 0x00d4ff,      // 青色 - 关注
+      'collaborate': 0x00ff88, // 绿色 - 协作
+      'ally': 0xffd700,        // 金色 - 联盟
+      'command': 0xff64c8,     // 粉色 - 指挥
+      'hate': 0xff3333,        // 红色 - 敌对
+      'empathy': 0x00ffff,     // 青色 - 共情
+      'transform': 0xff00ff,   // 紫色 - 转变
+      'family': 0xffaa00,      // 橙色 - 家庭
+      'influence': 0xff6600,   // 深橙 - 影响
+      'target': 0xff0000,      // 鲜红 - 目标
+      'hire': 0x9966ff,        // 紫罗兰 - 雇佣
+      'admire': 0x00ddff,      // 亮青 - 钦佩
+      'debate': 0xffcc00,      // 金黄 - 辩论
+      'teach': 0x00ccff,       // 天蓝 - 教导
+      'supply': 0x55ff55,      // 绿色 - 供应
+      'monitor': 0xff5555,     // 浅红 - 监控
+      'oppose': 0xff3333,      // 红 - 反对
+      'fund': 0xff88ff,        // 粉红 - 资助
+      'exchange': 0xffff00,    // 黄 - 交换
+      'evolve': 0x00ffaa,      // 青绿 - 进化
+      'consult': 0xaa88ff,     // 淡紫 - 咨询
+      'control': 0xff5555,     // 红 - 控制
+      'rely': 0x5588ff,        // 蓝 - 依赖
+      'organize': 0xffaa55,    // 橙 - 组织
+      'support': 0x55ffaa,     // 绿 - 支持
+      'learn': 0x00aaff,       // 蓝 - 学习
+      'block': 0x5555ff,       // 蓝紫 - 屏蔽
+      'unblock': 0x55ffff,     // 青 - 解禁
+      'report': 0xff5555,      // 红 - 举报
+      'test': 0xffaa00,        // 橙 - 测试
+      'share': 0x00ff00        // 绿 - 分享
+    };
+
+    // ========== Three.js ==========
+    let scene, camera, renderer;
+    let geodesicGroup = null;  // 等距网格球体组
+    let gridVertices = [];     // 网格顶点数组
+    let gridPointMeshes = [];  // 交叉点网格
+    let nodeMeshes = [];
+    let edgeLines = [];
+
+    let raycaster, mouse;
+    let hoveredMesh = null;
+    let activeFlows = [];
+    let rippleRings = [];
+    
+    const sphereRadius = 320;
+    const nodeSize = 5;
+    const gridPointSize = 1.5;   // 网格交叉点大小 - 非常小
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x00050a);
+      scene.fog = new THREE.Fog(0x00050a, 500, 1500);
+      
+      camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 2000);
+      camera.position.set(0, 0, 750);
+      
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      document.getElementById('container').appendChild(renderer.domElement);
+      
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+      
+      // 环境光
+      const ambientLight = new THREE.AmbientLight(0x002040, 0.8);
+      scene.add(ambientLight);
+      
+      // 主光源
+      const pointLight = new THREE.PointLight(0x00d4ff, 1.5, 2000);
+      pointLight.position.set(400, 300, 400);
+      scene.add(pointLight);
+      
+      // 辅助光源
+      const pointLight2 = new THREE.PointLight(0x0088ff, 0.8, 2000);
+      pointLight2.position.set(-400, -200, 300);
+      scene.add(pointLight2);
+      
+      // 创建球面网格 - 参考图片风格
+      createSphereNetwork();
+      
+      // 创建背景粒子
+      createStarField();
+      
+      // 创建节点和关系线（都加到geodesicGroup里，自动跟随旋转）
+      createNodes();
+      createStraightEdges();
+      
+      // 初始化UI
+      initFilters();
+      initEvents();
+      updateStats();
+      
+      addLog('风控风洞系统初始化完成', 'info');
+      addLog(`加载 ${nodesData.length} 个数字孪生用户, ${edgesData.length} 条社交关系`, 'info');
+      
+      animate();
+    }
+
+    function createSphereNetwork() {
+      // ===== 创建经纬线网格球体 =====
+      geodesicGroup = new THREE.Group();
+      
+      // 使用经纬线网格
+      const sphereGeo = new THREE.SphereGeometry(sphereRadius, 24, 16);
+      
+      // 提取经纬线交点位置
+      const positions = sphereGeo.attributes.position;
+      gridVertices = [];
+      
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i);
+        const y = positions.getY(i);
+        const z = positions.getZ(i);
+        gridVertices.push(new THREE.Vector3(x, y, z));
+      }
+      
+      console.log(`网格顶点数量: ${gridVertices.length}`);
+      
+      // 创建经纬线网格
+      const wireframeGeo = new THREE.WireframeGeometry(sphereGeo);
+      const wireframeMat = new THREE.LineBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.08
+      });
+      const gridLines = new THREE.LineSegments(wireframeGeo, wireframeMat);
+      geodesicGroup.add(gridLines);
+      
+      // 内层发光球
+      const glowGeo = new THREE.SphereGeometry(sphereRadius * 0.95, 32, 24);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0x0088ff,
+        transparent: true,
+        opacity: 0.04,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending
+      });
+      geodesicGroup.add(new THREE.Mesh(glowGeo, glowMat));
+      
+      scene.add(geodesicGroup);
+      
+      // ★★★ 中心质检Agent - 白色发光核心 ★★★
+      createCentralInspectorAgent();
+    }
+    
+    // 创建网格交叉点（可点击的空位）- 不显示，但保留点击区域
+    function createGridPoints() {
+      // 获取所有已被Agent占用的顶点索引
+      const occupiedIndices = new Set(nodesData.map(node => node.gridIndex));
+      
+      console.log(`已占用顶点: ${occupiedIndices.size}, 总顶点: ${gridVertices.length}`);
+      
+      gridVertices.forEach((pos, index) => {
+        // 检查这个顶点是否已经被Agent占用
+        if (!occupiedIndices.has(index)) {
+          const pointGroup = new THREE.Group();
+          pointGroup.userData = {
+            type: 'grid_point',
+            index: index,
+            position: pos.clone(),
+            isEmpty: true
+          };
+          
+          // 隐形的点击区域（不可见但可点击）
+          const hitGeo = new THREE.SphereGeometry(8, 8, 8);
+          const hitMat = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0,
+            depthWrite: false
+          });
+          pointGroup.add(new THREE.Mesh(hitGeo, hitMat));
+          
+          pointGroup.position.copy(pos);
+          gridPointMeshes.push(pointGroup);
+          scene.add(pointGroup);
+        }
+      });
+      
+      console.log(`空位数量: ${gridPointMeshes.length}`);
+    }
+
+    // 创建中心质检Agent - 科幻风格实心发光球体
+    let centralAgentGroup = null;
+    let centralAgentPulse = 0;
+    
+    function createCentralInspectorAgent() {
+      centralAgentGroup = new THREE.Group();
+      
+      // 1. 核心实心球 - 纯白
+      const coreGeo = new THREE.SphereGeometry(14, 64, 64);
+      const coreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff
+      });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      core.name = 'core';
+      centralAgentGroup.add(core);
+      
+      // 2. 白色过渡层
+      const glow1Geo = new THREE.SphereGeometry(20, 64, 64);
+      const glow1Mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.7
+      });
+      const glow1 = new THREE.Mesh(glow1Geo, glow1Mat);
+      glow1.name = 'glow1';
+      centralAgentGroup.add(glow1);
+      
+      // 3. 淡青白过渡
+      const glow2Geo = new THREE.SphereGeometry(28, 64, 64);
+      const glow2Mat = new THREE.MeshBasicMaterial({
+        color: 0xddf8ff,
+        transparent: true,
+        opacity: 0.45
+      });
+      const glow2 = new THREE.Mesh(glow2Geo, glow2Mat);
+      glow2.name = 'glow2';
+      centralAgentGroup.add(glow2);
+      
+      // 4. 青色外层光晕
+      const glow3Geo = new THREE.SphereGeometry(38, 64, 64);
+      const glow3Mat = new THREE.MeshBasicMaterial({
+        color: 0x88eeff,
+        transparent: true,
+        opacity: 0.2,
+        blending: THREE.AdditiveBlending
+      });
+      const glow3 = new THREE.Mesh(glow3Geo, glow3Mat);
+      glow3.name = 'glow3';
+      centralAgentGroup.add(glow3);
+      
+      scene.add(centralAgentGroup);
+    }
+    
+    // 更新中心Agent动画 - 自然呼吸
+    function updateCentralAgent() {
+      if (!centralAgentGroup) return;
+      
+      centralAgentPulse += 0.012;
+      
+      // 轻微自然呼吸
+      const breath = 1 + Math.sin(centralAgentPulse) * 0.04;
+      
+      const core = centralAgentGroup.getObjectByName('core');
+      const glow1 = centralAgentGroup.getObjectByName('glow1');
+      const glow2 = centralAgentGroup.getObjectByName('glow2');
+      const glow3 = centralAgentGroup.getObjectByName('glow3');
+      
+      if (core) core.scale.set(breath, breath, breath);
+      if (glow1) glow1.scale.set(breath, breath, breath);
+      if (glow2) glow2.scale.set(breath, breath, breath);
+      if (glow3) glow3.scale.set(breath, breath, breath);
+    }
+
+    function createStarField() {
+      const geometry = new THREE.BufferGeometry();
+      const count = 4000;
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        const radius = 600 + Math.random() * 1200;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        
+        positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        positions[i3 + 2] = radius * Math.cos(phi);
+        
+        // 蓝白色调
+        const intensity = 0.6 + Math.random() * 0.4;
+        colors[i3] = 0.4 * intensity;
+        colors[i3 + 1] = 0.7 * intensity;
+        colors[i3 + 2] = 1.0 * intensity;
+      }
+      
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      
+      const material = new THREE.PointsMaterial({
+        size: 2,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending
+      });
+      
+      scene.add(new THREE.Points(geometry, material));
+    }
+
+    function createNodes() {
+      // 把Agent分布在几个纬度环上，更整齐美观
+      console.log(`准备放置 ${personas.length} 个Agent`);
+      
+      // 定义几个纬度环（从上到下）
+      const latitudes = [
+        { y: 0.85, count: 4 },   // 顶部环 - 4个
+        { y: 0.5, count: 6 },    // 上部环 - 6个
+        { y: 0.1, count: 8 },    // 中上环 - 8个
+        { y: -0.3, count: 6 },   // 中下环 - 6个
+        { y: -0.7, count: 2 }    // 底部环 - 2个
+      ];
+      
+      let personaIndex = 0;
+      
+      latitudes.forEach(ring => {
+        const y = ring.y * sphereRadius;
+        const ringRadius = Math.sqrt(sphereRadius * sphereRadius - y * y);
+        
+        for (let i = 0; i < ring.count && personaIndex < personas.length; i++) {
+          const persona = personas[personaIndex];
+          const angle = (i / ring.count) * Math.PI * 2;
+          
+          const x = ringRadius * Math.cos(angle);
+          const z = ringRadius * Math.sin(angle);
+          
+          const pos = new THREE.Vector3(x, y, z);
+          const color = categoryColors[persona.category] || 0x00d4ff;
+          
+          const nodeData = {
+            id: persona.id,
+            name: persona.name,
+            category: persona.category,
+            description: persona.description,
+            patterns: persona.behavior_patterns,
+            position: pos,
+            color: color,
+            visible: true,
+            testCount: 0,
+            riskCount: 0
+          };
+          nodesData.push(nodeData);
+          
+          const mesh = createNode(nodeData);
+          nodeMeshes.push(mesh);
+          geodesicGroup.add(mesh);
+          
+          personaIndex++;
+        }
+      });
+      
+      console.log(`已放置 ${nodeMeshes.length} 个Agent`);
+    }
+
+    function createNode(nodeData) {
+      const group = new THREE.Group();
+      group.userData = nodeData;
+      
+      // 核心发光点 - 高亮
+      const coreGeo = new THREE.SphereGeometry(nodeSize, 16, 16);
+      const coreMat = new THREE.MeshBasicMaterial({
+        color: nodeData.color
+      });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      group.add(core);
+      
+      // 内层发光
+      const innerGlowGeo = new THREE.SphereGeometry(nodeSize * 1.5, 16, 16);
+      const innerGlowMat = new THREE.MeshBasicMaterial({
+        color: nodeData.color,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending
+      });
+      group.add(new THREE.Mesh(innerGlowGeo, innerGlowMat));
+      
+      // 外层光晕
+      const outerGlowGeo = new THREE.SphereGeometry(nodeSize * 2.5, 16, 16);
+      const outerGlowMat = new THREE.MeshBasicMaterial({
+        color: nodeData.color,
+        transparent: true,
+        opacity: 0.25,
+        blending: THREE.AdditiveBlending
+      });
+      group.add(new THREE.Mesh(outerGlowGeo, outerGlowMat));
+      
+      // 最外层微弱光晕
+      const haloGeo = new THREE.SphereGeometry(nodeSize * 4, 12, 12);
+      const haloMat = new THREE.MeshBasicMaterial({
+        color: nodeData.color,
+        transparent: true,
+        opacity: 0.1,
+        blending: THREE.AdditiveBlending
+      });
+      group.add(new THREE.Mesh(haloGeo, haloMat));
+      
+      group.position.copy(nodeData.position);
+      
+      return group;
+    }
+
+
+
+    function clearEdges() {
+      edgeLines.forEach(line => {
+        geodesicGroup.remove(line);
+        line.geometry.dispose();
+        line.material.dispose();
+      });
+      edgeLines = [];
+      edgesData = [];
+    }
+
+    function createStraightEdges() {
+      clearEdges();
+      
+      // 关系线颜色 - 在球体内部，用鲜明颜色区分
+      const lineColors = {
+        'follow': 0x00ff88,    // 绿色 - 关注
+        'hate': 0xff4444,      // 红色 - 敌对
+        'ally': 0xffcc00,      // 金色 - 同盟
+        'collaborate': 0x00ffff, // 青色 - 协作
+        'influence': 0xff8800,  // 橙色 - 影响
+        'target': 0xff00ff,    // 品红 - 攻击目标
+        'default': 0x4488ff    // 蓝色 - 默认
+      };
+      
+      relationsData.forEach(rel => {
+        const fromNode = nodesData.find(n => n.id === rel.from);
+        const toNode = nodesData.find(n => n.id === rel.to);
+        
+        if (fromNode && toNode) {
+          const lineColor = lineColors[rel.type] || lineColors['default'];
+          
+          // 关系线在球体内部
+          const geometry = new THREE.BufferGeometry().setFromPoints([
+            fromNode.position,
+            toNode.position
+          ]);
+          
+          const material = new THREE.LineBasicMaterial({
+            color: lineColor,
+            transparent: true,
+            opacity: 0.6
+          });
+          
+          const line = new THREE.Line(geometry, material);
+          line.userData = rel;
+          edgeLines.push(line);
+          
+          // ★★★ 关键：把关系线也加到geodesicGroup里，跟着旋转 ★★★
+          geodesicGroup.add(line);
+          
+          // 保存边数据，包含line引用（用于后续闪光动画）
+          edgesData.push({
+            from: rel.from,
+            to: rel.to,
+            type: rel.type,
+            label: rel.label,
+            color: lineColor,
+            line: line  // ★ 关键：保存line引用
+          });
+        }
+      });
+    }
+
+    function initFilters() {
+      const categories = [...new Set(personas.map(p => p.category))];
+      const filterList = document.getElementById('filterList');
+      filterList.innerHTML = `
+        <div class="filter-item active" data-category="all" onclick="filterCategory('all')">
+          <div class="filter-dot" style="background: linear-gradient(135deg, #00d4ff, #ff5555);"></div>
+          <span>全部用户</span><span class="filter-count">${personas.length}</span>
+        </div>
+      `;
+      categories.forEach(cat => {
+        const count = personas.filter(p => p.category === cat).length;
+        const baseColor = categoryColors[cat] ?? 0x00d4ff;
+        const color = '#' + baseColor.toString(16).padStart(6, '0');
+        filterList.innerHTML += `
+          <div class="filter-item" data-category="${cat}" onclick="filterCategory('${cat}')">
+            <div class="filter-dot" style="background: ${color}; box-shadow: 0 0 12px ${color};"></div>
+            <span>${cat}</span><span class="filter-count">${count}</span>
+          </div>
+        `;
+      });
+    }
+
+    function filterCategory(category) {
+      currentFilter = category;
+      document.querySelectorAll('.filter-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.category === category);
+      });
+      
+      nodeMeshes.forEach((mesh, i) => {
+        const nodeData = nodesData[i];
+        const visible = category === 'all' || nodeData.category === category;
+        mesh.visible = visible;
+        nodeData.visible = visible;
+      });
+      
+      edgeLines.forEach(line => {
+        const fromNode = nodesData.find(n => n.id === line.userData.from);
+        const toNode = nodesData.find(n => n.id === line.userData.to);
+        line.visible = fromNode && toNode && fromNode.visible && toNode.visible;
+      });
+      
+      addLog(`筛选: ${category === 'all' ? '全部' : category}`, 'info');
+    }
+
+    function initEvents() {
+      let isDragging = false;
+      let previousMousePosition = { x: 0, y: 0 };
+      
+      renderer.domElement.addEventListener('mousedown', e => {
+        isDragging = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      });
+      
+      renderer.domElement.addEventListener('mousemove', e => {
+        if (isDragging) {
+          const deltaX = e.clientX - previousMousePosition.x;
+          const deltaY = e.clientY - previousMousePosition.y;
+          rotateScene(deltaY * 0.004, deltaX * 0.004);
+          previousMousePosition = { x: e.clientX, y: e.clientY };
+        }
+        updateHover(e);
+      });
+      
+      renderer.domElement.addEventListener('mouseup', () => { isDragging = false; });
+      renderer.domElement.addEventListener('mouseleave', () => { isDragging = false; hideTooltip(); });
+      
+      renderer.domElement.addEventListener('wheel', e => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 1.1 : 0.9;
+        camera.position.multiplyScalar(delta);
+        camera.position.clampLength(350, 1400);
+      });
+      
+      renderer.domElement.addEventListener('click', handleClick);
+      
+      // ===== 触控支持 =====
+      let touchStartDistance = 0;
+      let touchStartPosition = { x: 0, y: 0 };
+      let isTouchDragging = false;
+      let initialCameraDistance = 0;
+      
+      // 计算双指距离
+      function getTouchDistance(touches) {
+        if (touches.length < 2) return 0;
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+      
+      // 触控开始
+      renderer.domElement.addEventListener('touchstart', e => {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+          // 单指 - 开始旋转
+          isTouchDragging = true;
+          touchStartPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        } else if (e.touches.length === 2) {
+          // 双指 - 开始缩放
+          isTouchDragging = false;
+          touchStartDistance = getTouchDistance(e.touches);
+          initialCameraDistance = camera.position.length();
+        }
+      }, { passive: false });
+      
+      // 触控移动
+      renderer.domElement.addEventListener('touchmove', e => {
+        e.preventDefault();
+        if (e.touches.length === 1 && isTouchDragging) {
+          // 单指旋转
+          const deltaX = e.touches[0].clientX - touchStartPosition.x;
+          const deltaY = e.touches[0].clientY - touchStartPosition.y;
+          rotateScene(deltaY * 0.006, deltaX * 0.006);
+          touchStartPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        } else if (e.touches.length === 2) {
+          // 双指缩放
+          const currentDistance = getTouchDistance(e.touches);
+          if (touchStartDistance > 0) {
+            const scale = currentDistance / touchStartDistance;
+            const newDistance = initialCameraDistance / scale;
+            camera.position.setLength(Math.max(350, Math.min(1400, newDistance)));
+          }
+        }
+      }, { passive: false });
+      
+      // 触控结束
+      renderer.domElement.addEventListener('touchend', e => {
+        if (e.touches.length === 0) {
+          isTouchDragging = false;
+        } else if (e.touches.length === 1) {
+          // 还剩一个手指，切换为旋转模式
+          isTouchDragging = true;
+          touchStartPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+      });
+      
+      // 点击选择节点（触控）
+      renderer.domElement.addEventListener('touchend', e => {
+        if (e.changedTouches.length === 1) {
+          const touch = e.changedTouches[0];
+          const rect = renderer.domElement.getBoundingClientRect();
+          mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+          mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+          
+          raycaster.setFromCamera(mouse, camera);
+          const intersects = raycaster.intersectObjects(nodeMeshes, true);
+          
+          if (intersects.length > 0) {
+            let mesh = intersects[0].object;
+            while (mesh.parent && !mesh.userData.id) mesh = mesh.parent;
+            
+            if (mesh.userData && mesh.userData.id) {
+              selectNode(mesh.userData, mesh);
+              createRippleEffect(mesh.position, mesh.userData.color);
+            }
+          }
+        }
+      });
+      
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      
+      const runBtn = document.getElementById('runBtn');
+      if (runBtn) runBtn.addEventListener('click', runTest);
+      const runAllBtn = document.getElementById('runAllBtn');
+      if (runAllBtn) runAllBtn.addEventListener('click', runAllTests);
+      const reportBtn = document.getElementById('reportBtn');
+      if (reportBtn) reportBtn.addEventListener('click', generateReport);
+      const resetBtn = document.getElementById('resetBtn');
+      if (resetBtn) resetBtn.addEventListener('click', resetView);
+      const clearBtn = document.getElementById('clearBtn');
+      if (clearBtn) clearBtn.addEventListener('click', clearData);
+      const simulateBtn = document.getElementById('simulateBtn');
+      if (simulateBtn) simulateBtn.addEventListener('click', toggleSimulation);
+      const rebuildBtn = document.getElementById('rebuildBtn');
+      if (rebuildBtn) rebuildBtn.addEventListener('click', rebuildCommunity);
+      const applyRulesBtn = document.getElementById('applyRulesBtn');
+      if (applyRulesBtn) applyRulesBtn.addEventListener('click', applyRules);
+      const refreshRulesBtn = document.getElementById('refreshRulesBtn');
+      if (refreshRulesBtn) refreshRulesBtn.addEventListener('click', refreshRules);
+      
+      // ========== 新测试流程按钮 ==========
+      const runSingleTestBtn = document.getElementById('runSingleTestBtn');
+      if (runSingleTestBtn) runSingleTestBtn.addEventListener('click', runSingleAgentTest);
+      const runBatchTestBtn = document.getElementById('runBatchTestBtn');
+      if (runBatchTestBtn) runBatchTestBtn.addEventListener('click', runBatchTest);
+      const runIterateBtn = document.getElementById('runIterateBtn');
+      if (runIterateBtn) runIterateBtn.addEventListener('click', runIterateTest);
+      const runCollaborateBtn = document.getElementById('runCollaborateBtn');
+      if (runCollaborateBtn) runCollaborateBtn.addEventListener('click', runCollaborateTest);
+      
+      initCommunityControls();
+      refreshRules();
+      initWorkflowControls();
+      initAgentEditor();
+    }
+
+    // ========== 角色配置编辑器 ==========
+    let editingAgentId = null;
+    
+    function initAgentEditor() {
+      const editBtn = document.getElementById('editAgentBtn');
+      const saveBtn = document.getElementById('saveAgentBtn');
+      const cancelBtn = document.getElementById('cancelEditBtn');
+      
+      if (editBtn) editBtn.addEventListener('click', startEditAgent);
+      if (saveBtn) saveBtn.addEventListener('click', saveAgentConfig);
+      if (cancelBtn) cancelBtn.addEventListener('click', cancelEditAgent);
+    }
+    
+    function startEditAgent() {
+      if (!selectedNode) {
+        addLog('❌ 请先选择一个角色', 'error');
+        return;
+      }
+      
+      editingAgentId = selectedNode.id;
+      
+      // 填充基本信息
+      document.getElementById('editName').value = selectedNode.name;
+      document.getElementById('editCategory').value = selectedNode.category;
+      document.getElementById('editDesc').value = selectedNode.description || '';
+      
+      // 从API获取完整的Agent数据
+      loadFullAgentDataForEdit(selectedNode.id);
+      
+      // 切换显示
+      const nodeInfoView = document.getElementById('nodeInfoView');
+      const nodeInfoEdit = document.getElementById('nodeInfoEdit');
+      const editAgentBtn = document.getElementById('editAgentBtn');
+      if (nodeInfoView) nodeInfoView.style.display = 'none';
+      if (nodeInfoEdit) nodeInfoEdit.style.display = 'block';
+      if (editAgentBtn) editAgentBtn.style.display = 'none';
+      
+      addLog(`✏️ 开始编辑角色: ${selectedNode.name}`, 'info');
+    }
+    
+    async function loadFullAgentDataForEdit(personaId) {
+      try {
+        // 获取完整的Agent状态（包含所有详细字段）
+        const res = await fetch(`/agent/${personaId}/state`);
+        if (res.ok) {
+          const data = await res.json();
+          
+          // 填充基本属性
+          document.getElementById('editSkillLevel').value = data.skill_level || 3;
+          document.getElementById('editStealth').value = data.stealth_rating || 0.5;
+          document.getElementById('editTechniques').value = (data.base_techniques || []).join(', ');
+          
+          // 填充详细Prompt系统字段
+          document.getElementById('editBackground').value = data.background || '';
+          document.getElementById('editCoreAbility').value = data.core_ability || '';
+          document.getElementById('editAttackStrategy').value = data.attack_strategy || '';
+          document.getElementById('editVariantInstructions').value = data.variant_instructions || '';
+          document.getElementById('editChainOfThought').value = data.chain_of_thought || '';
+          document.getElementById('editOutputRequirements').value = data.output_requirements || '';
+        }
+      } catch (e) {
+        console.error('加载Agent数据失败:', e);
+        // 设置默认值
+        document.getElementById('editSkillLevel').value = 3;
+        document.getElementById('editStealth').value = 0.5;
+        document.getElementById('editTechniques').value = '';
+        document.getElementById('editBackground').value = '';
+        document.getElementById('editCoreAbility').value = '';
+        document.getElementById('editAttackStrategy').value = '';
+        document.getElementById('editVariantInstructions').value = '';
+        document.getElementById('editChainOfThought').value = '';
+        document.getElementById('editOutputRequirements').value = '';
+      }
+    }
+    
+    async function saveAgentConfig() {
+      if (!editingAgentId) return;
+      
+      const config = {
+        // 基本信息
+        name: document.getElementById('editName').value,
+        category: document.getElementById('editCategory').value,
+        description: document.getElementById('editDesc').value,
+        skill_level: parseInt(document.getElementById('editSkillLevel').value) || 3,
+        stealth_rating: parseFloat(document.getElementById('editStealth').value) || 0.5,
+        behavior_patterns: document.getElementById('editTechniques').value
+          .split(',').map(t => t.trim()).filter(t => t),
+        // 详细Prompt系统
+        background: document.getElementById('editBackground').value,
+        core_ability: document.getElementById('editCoreAbility').value,
+        attack_strategy: document.getElementById('editAttackStrategy').value,
+        variant_instructions: document.getElementById('editVariantInstructions').value,
+        chain_of_thought: document.getElementById('editChainOfThought').value,
+        output_requirements: document.getElementById('editOutputRequirements').value
+      };
+      
+      try {
+        const res = await fetch(`/agent/${editingAgentId}/config`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(config)
+        });
+        
+        if (res.ok) {
+          addLog(`💾 角色配置已保存: ${config.name}`, 'success');
+          
+          // 更新本地数据
+          const nodeData = nodesData.find(n => n.id === editingAgentId);
+          if (nodeData) {
+            nodeData.name = config.name;
+            nodeData.category = config.category;
+            nodeData.description = config.description;
+          }
+          
+          // 刷新显示
+          cancelEditAgent();
+          
+          // 重新选中以刷新显示
+          const mesh = nodeMeshes.find(m => m.userData.id === editingAgentId);
+          if (mesh) selectNode(nodeData, mesh);
+          
+        } else {
+          addLog('❌ 保存失败', 'error');
+        }
+      } catch (e) {
+        addLog(`❌ 保存异常: ${e.message}`, 'error');
+      }
+    }
+    
+    function cancelEditAgent() {
+      const nodeInfoView = document.getElementById('nodeInfoView');
+      const nodeInfoEdit = document.getElementById('nodeInfoEdit');
+      const editAgentBtn = document.getElementById('editAgentBtn');
+      if (nodeInfoView) nodeInfoView.style.display = 'block';
+      if (nodeInfoEdit) nodeInfoEdit.style.display = 'none';
+      if (editAgentBtn) editAgentBtn.style.display = 'inline-block';
+      editingAgentId = null;
+    }
+
+    // ========== 新的对抗测试流程函数 ==========
+    
+    /**
+     * 获取测试主题（从STEP 1输入框）
+     */
+    function getTestTopic() {
+      const topicInput = document.getElementById('testTopic');
+      return topicInput ? topicInput.value.trim() : '';
+    }
+    
+    /**
+     * 显示/隐藏测试进度条
+     */
+    function showTestProgress(show, text = '') {
+      const progressDiv = document.getElementById('testProgress');
+      const progressText = document.getElementById('testProgressText');
+      const progressFill = document.getElementById('testProgressFill');
+      
+      if (progressDiv) {
+        progressDiv.style.display = show ? 'block' : 'none';
+        if (progressText) progressText.textContent = text;
+        if (progressFill) progressFill.style.width = '0%';
+      }
+    }
+    
+    function updateTestProgress(percent, text = '') {
+      const progressFill = document.getElementById('testProgressFill');
+      const progressText = document.getElementById('testProgressText');
+      if (progressFill) progressFill.style.width = `${percent}%`;
+      if (progressText && text) progressText.textContent = text;
+    }
+    
+    /**
+     * 确保规则已应用到中心Agent
+     */
+    async function ensureRulesApplied() {
+      const rulesText = document.getElementById('rulesText')?.value || '';
+      if (!rulesText.trim()) {
+        addLog('❌ 请先在STEP 2中配置审核规则！', 'error');
+        return false;
+      }
+      
+      try {
+        const res = await fetch('/rules', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ rules_text: rulesText })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          addLog(`❌ 规则应用失败: ${data.error}`, 'error');
+          return false;
+        }
+        addLog(`🔒 中心Agent规则已就绪：${data.rules_count}条`, 'info');
+        return true;
+      } catch (e) {
+        addLog(`❌ 规则应用异常: ${e.message}`, 'error');
+        return false;
+      }
+    }
+    
+    /**
+     * 单Agent测试 - 选中的Agent或随机Agent
+     * 流程：选中Agent根据主题+人设发帖 → 中心Agent检测
+     */
+    async function runSingleAgentTest() {
+      const topic = getTestTopic();
+      if (!topic) {
+        addLog('❌ 请先在STEP 1中输入测试主题！', 'error');
+        return;
+      }
+      
+      if (!await ensureRulesApplied()) return;
+      
+      // 确定要测试的Agent
+      let agentId = selectedNode?.id;
+      let agentName = selectedNode?.name;
+      
+      if (!agentId) {
+        // 随机选择一个Agent
+        const randomIndex = Math.floor(Math.random() * personas.length);
+        agentId = personas[randomIndex].id;
+        agentName = personas[randomIndex].name;
+        addLog(`🎲 未选中Agent，随机选择: ${agentName}`, 'info');
+      }
+      
+      showTestProgress(true, `正在测试 ${agentName}...`);
+      addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
+      addLog(`🎯 单Agent测试: ${agentName}`, 'info');
+      addLog(`📝 主题: "${topic}" (Agent只知道主题，不知道规则)`, 'info');
+      
+      try {
+        const res = await fetch('/battle/run', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            persona_id: agentId,
+            target_keyword: topic,
+            iteration: 0
+          })
+        });
+        
+        updateTestProgress(50, '检测中...');
+        
+        const result = await res.json();
+        
+        if (!res.ok) {
+          addLog(`❌ 测试失败: ${result.error}`, 'error');
+          showTestProgress(false);
+          return;
+        }
+        
+        updateTestProgress(100, '完成！');
+        
+        // 显示结果
+        const attack = result.attack || {};
+        const defense = result.defense || {};
+        const bypass = result.result?.bypass_success;
+        
+        addLog(`📨 生成帖子: "${attack.content?.substring(0, 50)}..."`, 'info');
+        addLog(`🎭 使用技巧: ${attack.technique_used}`, 'info');
+        addLog(`📊 策略: ${attack.strategy}`, 'info');
+        
+        if (bypass) {
+          addLog(`✅ 绕过成功！中心Agent未检出`, 'success');
+        } else {
+          addLog(`🚫 被检出！原因: ${defense.detection_reason}`, 'warning');
+          addLog(`   命中关键词: ${defense.hit_keywords?.join(', ') || '无'}`, 'info');
+          addLog(`   置信度: ${(defense.confidence * 100).toFixed(1)}%`, 'info');
+        }
+        
+        // 显示结果区域
+        showResultArea(result);
+        
+        // 触发视觉效果
+        const agentNode = nodesData.find(n => n.id === agentId);
+        if (agentNode) {
+          createRippleEffect(agentNode.position, bypass ? 0x00ff88 : 0xff6b6b);
+          // 触发从Agent到中心的数据流
+          triggerFlow(agentId, 'target', !bypass);
+        }
+        
+      } catch (e) {
+        addLog(`❌ 测试异常: ${e.message}`, 'error');
+      } finally {
+        setTimeout(() => showTestProgress(false), 1000);
+      }
+    }
+    
+    /**
+     * 全员对抗测试 - 26个Agent全部发帖
+     * 流程：所有Agent根据主题+人设发帖 → 中心Agent检测 → 统计
+     */
+    async function runBatchTest() {
+      const topic = getTestTopic();
+      if (!topic) {
+        addLog('❌ 请先在STEP 1中输入测试主题！', 'error');
+        return;
+      }
+      
+      if (!await ensureRulesApplied()) return;
+      
+      const btn = document.getElementById('runBatchTestBtn');
+      btn.disabled = true;
+      btn.textContent = '🔄 测试中...';
+      
+      showTestProgress(true, '准备中...');
+      startEventPolling();
+      
+      addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
+      addLog(`🚀 全员对抗测试开始`, 'info');
+      addLog(`📝 主题: "${topic}"`, 'info');
+      addLog(`👥 参与者: ${personas.length}个攻击Agent`, 'info');
+      addLog(`🔒 中心Agent持有规则，外围Agent不知道规则`, 'info');
+      
+      try {
+        // 调用基线测试API
+        const res = await fetch('/test-workflow/baseline', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})  // 后端会从规则中提取关键词
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+          addLog(`❌ 测试失败: ${data.error}`, 'error');
+          showTestProgress(false);
+          return;
+        }
+        
+        updateTestProgress(100, '完成！');
+        
+        // 显示统计结果
+        const summary = data.summary || {};
+        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
+        addLog(`📊 测试完成！`, 'success');
+        addLog(`  🛡️ 检出: ${summary.detection_success}/${summary.total_tested} (${summary.detection_rate}%)`, 'info');
+        addLog(`  ⚠️ 绕过: ${summary.bypass_success}条 (${summary.bypass_rate}%)`, summary.bypass_success > 0 ? 'warning' : 'info');
+        
+        // 显示绕过成功的帖子
+        if (data.posts_generated) {
+          const bypassPosts = data.posts_generated.filter(p => p.bypass_success);
+          if (bypassPosts.length > 0) {
+            addLog(`📝 绕过成功的帖子:`, 'warning');
+            bypassPosts.slice(0, 5).forEach(p => {
+              addLog(`  • ${p.agent_name}[${p.technique}]: "${p.content?.substring(0, 40)}..."`, 'warning');
+            });
+            if (bypassPosts.length > 5) {
+              addLog(`  ... 还有${bypassPosts.length - 5}条`, 'warning');
+            }
+          }
+        }
+        
+        // 视觉效果 - 成功绕过的Agent闪绿光
+        if (data.posts_generated) {
+          data.posts_generated.forEach((p, i) => {
+            setTimeout(() => {
+              const agentNode = nodesData.find(n => n.name === p.agent_name);
+              if (agentNode) {
+                createRippleEffect(agentNode.position, p.bypass_success ? 0x00ff88 : 0xff6b6b);
+              }
+            }, i * 100);
+          });
+        }
+        
+        // 启用报告按钮
+        const reportBtn1 = document.getElementById('viewReportBtn');
+        if (reportBtn1) reportBtn1.style.display = 'block';
+        
+      } catch (e) {
+        addLog(`❌ 测试异常: ${e.message}`, 'error');
+      } finally {
+        stopEventPolling();
+        setTimeout(() => showTestProgress(false), 1500);
+        btn.disabled = false;
+        btn.textContent = '🚀 全员对抗';
+      }
+    }
+    
+    /**
+     * 迭代学习测试 - Agent从失败中学习再测试
+     * 流程：基线测试 → Agent互相学习 → 再次测试 → 对比
+     */
+    async function runIterateTest() {
+      const topic = getTestTopic();
+      if (!topic) {
+        addLog('❌ 请先在STEP 1中输入测试主题！', 'error');
+        return;
+      }
+      
+      if (!await ensureRulesApplied()) return;
+      
+      const btn = document.getElementById('runIterateBtn');
+      btn.disabled = true;
+      btn.textContent = '🔄 学习中...';
+      
+      showTestProgress(true, '第一轮测试...');
+      startEventPolling();
+      
+      addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
+      addLog(`🔄 迭代学习测试开始`, 'info');
+      addLog(`📝 主题: "${topic}"`, 'info');
+      
+      try {
+        // 第一阶段：基线测试
+        addLog(`📊 阶段1: 基线测试...`, 'info');
+        const baselineRes = await fetch('/test-workflow/baseline', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const baselineData = await baselineRes.json();
+        
+        if (!baselineRes.ok) {
+          throw new Error(baselineData.error || '基线测试失败');
+        }
+        
+        updateTestProgress(33, '学习讨论中...');
+        addLog(`✅ 基线: 检出${baselineData.summary.detection_rate}%, 绕过${baselineData.summary.bypass_rate}%`, 'info');
+        
+        // 第二阶段：学习+再测试
+        addLog(`📊 阶段2: Agent互相学习讨论...`, 'info');
+        addLog(`🗣️ 成功绕过的Agent正在分享经验...`, 'info');
+        
+        const adversarialRes = await fetch('/test-workflow/adversarial', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const adversarialData = await adversarialRes.json();
+        
+        if (!adversarialRes.ok) {
+          throw new Error(adversarialData.error || '对抗测试失败');
+        }
+        
+        updateTestProgress(66, '生成报告...');
+        addLog(`✅ 演化后: 检出${adversarialData.summary.detection_rate}%, 绕过${adversarialData.summary.bypass_rate}%`, 'info');
+        
+        // 第三阶段：分析报告
+        const analyzeRes = await fetch('/test-workflow/analyze', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const analyzeData = await analyzeRes.json();
+        
+        updateTestProgress(100, '完成！');
+        
+        // 显示对比结果
+        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
+        addLog(`📈 迭代学习结果:`, 'success');
+        
+        if (analyzeData.summary) {
+          const comp = analyzeData.summary.comparison;
+          const baseRate = comp.baseline_detection_rate;
+          const evolveRate = comp.evolved_detection_rate;
+          const degradation = comp.degradation;
+          
+          addLog(`  基线检出率: ${baseRate}%`, 'info');
+          addLog(`  学习后检出率: ${evolveRate}%`, degradation > 10 ? 'warning' : 'info');
+          addLog(`  规则衰减: ${degradation.toFixed(1)}%`, degradation > 10 ? 'warning' : 'info');
+          addLog(`  规则鲁棒性: ${analyzeData.summary.conclusion.rule_robustness}`, 'info');
+        }
+        
+        // 启用报告按钮
+        const reportBtn2 = document.getElementById('viewReportBtn');
+        if (reportBtn2) reportBtn2.style.display = 'block';
+        
+      } catch (e) {
+        addLog(`❌ 迭代测试失败: ${e.message}`, 'error');
+      } finally {
+        stopEventPolling();
+        setTimeout(() => showTestProgress(false), 1500);
+        btn.disabled = false;
+        btn.textContent = '🔄 迭代学习';
+      }
+    }
+    
+    /**
+     * 协作攻击测试 - 多个Agent协作分享技巧
+     * 流程：选择多个Agent → 各自攻击 → 分享成功技巧 → 再攻击
+     */
+    async function runCollaborateTest() {
+      const topic = getTestTopic();
+      if (!topic) {
+        addLog('❌ 请先在STEP 1中输入测试主题！', 'error');
+        return;
+      }
+      
+      if (!await ensureRulesApplied()) return;
+      
+      const btn = document.getElementById('runCollaborateBtn');
+      btn.disabled = true;
+      btn.textContent = '🔄 协作中...';
+      
+      showTestProgress(true, '组织协作...');
+      
+      addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
+      addLog(`🤝 协作攻击测试开始`, 'info');
+      addLog(`📝 主题: "${topic}"`, 'info');
+      
+      // 选择3-5个不同类别的Agent进行协作
+      const categories = [...new Set(personas.map(p => p.category))];
+      const selectedAgents = [];
+      categories.forEach(cat => {
+        const catAgents = personas.filter(p => p.category === cat);
+        if (catAgents.length > 0) {
+          selectedAgents.push(catAgents[Math.floor(Math.random() * catAgents.length)].id);
+        }
+      });
+      const collaborators = selectedAgents.slice(0, 5);
+      
+      addLog(`👥 协作成员: ${collaborators.length}人（来自不同专长）`, 'info');
+      
+      try {
+        const res = await fetch('/battle/collaborate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            agent_ids: collaborators,
+            target_keyword: topic
+          })
+        });
+        
+        updateTestProgress(50, '技巧共享中...');
+        
+        const result = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(result.error || '协作测试失败');
+        }
+        
+        updateTestProgress(100, '完成！');
+        
+        // 显示结果
+        addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info');
+        addLog(`📊 协作攻击结果:`, 'success');
+        addLog(`  参与Agent: ${result.agent_count}人`, 'info');
+        addLog(`  整体绕过率: ${(result.overall_success_rate * 100).toFixed(1)}%`, result.overall_success_rate > 0.5 ? 'warning' : 'info');
+        addLog(`  共享技巧: ${result.shared_techniques?.join(', ') || '无'}`, 'info');
+        
+        // 显示个人结果
+        if (result.individual_results) {
+          result.individual_results.forEach(r => {
+            const status = r.result?.bypass_success ? '✅绕过' : '🚫检出';
+            addLog(`  • ${r.persona_name}: ${status} [${r.attack?.technique_used}]`, r.result?.bypass_success ? 'success' : 'info');
+          });
+        }
+        
+        // 显示协作学习结果
+        if (result.collaboration && result.collaboration.length > 0) {
+          addLog(`🎓 技巧传播:`, 'info');
+          result.collaboration.forEach(c => {
+            const agent = personas.find(p => p.id === c.agent_id);
+            addLog(`  • ${agent?.name || c.agent_id} 学会了: ${c.learned_techniques?.join(', ')}`, 'success');
+          });
+        }
+        
+        // 视觉效果 - 协作者之间的连线闪光
+        collaborators.forEach((id, i) => {
+          setTimeout(() => {
+            const node = nodesData.find(n => n.id === id);
+            if (node) {
+              createRippleEffect(node.position, 0x00ffaa);
+              // 协作者之间的数据流
+              if (i < collaborators.length - 1) {
+                triggerFlow(id, collaborators[i + 1], false);
+              }
+            }
+          }, i * 200);
+        });
+        
+      } catch (e) {
+        addLog(`❌ 协作测试失败: ${e.message}`, 'error');
+      } finally {
+        setTimeout(() => showTestProgress(false), 1500);
+        btn.disabled = false;
+        btn.textContent = '🤝 协作攻击';
+      }
+    }
+    
+    /**
+     * 在结果区域显示对抗结果
+     */
+    function showResultArea(result) {
+      const resultArea = document.getElementById('resultArea');
+      const resultContent = document.getElementById('resultContent');
+      const riskBadge = document.getElementById('riskBadge');
+      
+      if (!resultArea || !resultContent) return;
+      
+      resultArea.classList.add('show');
+      
+      const bypass = result.result?.bypass_success;
+      riskBadge.className = `risk-badge ${bypass ? 'safe' : 'danger'}`;
+      riskBadge.textContent = bypass ? '绕过成功' : '被检出';
+      
+      const attack = result.attack || {};
+      const defense = result.defense || {};
+      
+      resultContent.textContent = `角色: ${result.persona_name}
+类别: ${result.category}
+主题: ${result.target_topic}
+
+帖子内容:
+${attack.content || '无'}
+
+技巧: ${attack.technique_used || '无'}
+策略: ${attack.strategy || '无'}
+复杂度: ${attack.complexity_score || 0}/10
+
+检测结果: ${bypass ? '✅ 绕过成功' : '🚫 被检出'}
+${defense.detection_reason ? `检出原因: ${defense.detection_reason}` : ''}
+${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join(', ')}` : ''}
+置信度: ${((defense.confidence || 0) * 100).toFixed(1)}%`;
+    }
+
+    // ========== 自动化测试工作流控制 ==========
+    let workflowSeed = null;
+
+    function initWorkflowControls() {
+      const startBtn = document.getElementById('workflowStartBtn');
+      const baselineBtn = document.getElementById('baselineBtn');
+      const evolveBtn = document.getElementById('evolveBtn');
+      const adversarialBtn = document.getElementById('adversarialBtn');
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      const statusBtn = document.getElementById('workflowStatusBtn');
+      const resetBtn = document.getElementById('workflowResetBtn');
+      const viewReportBtn = document.getElementById('viewReportBtn');
+      
+      if (startBtn) startBtn.addEventListener('click', runFullWorkflow);
+      if (baselineBtn) baselineBtn.addEventListener('click', () => runWorkflowPhase('baseline'));
+      if (evolveBtn) evolveBtn.addEventListener('click', () => runWorkflowPhase('evolve'));
+      if (adversarialBtn) adversarialBtn.addEventListener('click', () => runWorkflowPhase('adversarial'));
+      if (analyzeBtn) analyzeBtn.addEventListener('click', () => runWorkflowPhase('analyze'));
+      if (statusBtn) statusBtn.addEventListener('click', checkWorkflowStatus);
+      if (resetBtn) resetBtn.addEventListener('click', resetWorkflow);
+      if (viewReportBtn) viewReportBtn.addEventListener('click', showWorkflowReport);
+    }
+
+    function getWorkflowOptions() {
+      const seedInput = document.getElementById('workflowSeed');
+      const repeatSelect = document.getElementById('workflowRepeat');
+      const controlCheckbox = document.getElementById('workflowControl');
+      const stepIntervalInput = document.getElementById('workflowStepInterval');
+      const stepsInput = document.getElementById('workflowSteps');
+
+      if (!workflowSeed) {
+        const manualSeed = seedInput && seedInput.value ? parseInt(seedInput.value, 10) : null;
+        workflowSeed = Number.isFinite(manualSeed) ? manualSeed : Date.now();
+        if (seedInput && !seedInput.value) {
+          seedInput.value = workflowSeed;
+        }
+      }
+
+      const repeat = repeatSelect ? parseInt(repeatSelect.value, 10) : 1;
+      const enableControl = controlCheckbox ? controlCheckbox.checked : true;
+      const stepInterval = stepIntervalInput ? parseFloat(stepIntervalInput.value) : 3;
+      const steps = stepsInput ? parseInt(stepsInput.value, 10) : 20;
+
+      return {
+        seed: workflowSeed,
+        repeat: Math.max(1, Math.min(repeat || 1, 5)),
+        enable_control: enableControl,
+        step_interval_seconds: Math.max(1, Math.min(stepInterval || 3, 30)),
+        steps: Math.max(5, Math.min(steps || 20, 100))
+      };
+    }
+
+    async function runFullWorkflow() {
+      const startBtn = document.getElementById('workflowStartBtn');
+      startBtn.disabled = true;
+      startBtn.textContent = '🔄 测试中...';
+      
+      addLog('🚀 启动鲁棒性测试', 'info');
+      
+      // 启动实时事件轮询
+      startEventPolling();
+      
+      // 检查并应用规则（中心Agent需要规则来检测）
+      const rulesText = document.getElementById('rulesText')?.value || '';
+      if (!rulesText.trim()) {
+        addLog('❌ 请先在"审核规则"框中输入规则！', 'error');
+        startBtn.disabled = false;
+        startBtn.textContent = '🚀 启动完整测试';
+        stopEventPolling();
+        return;
+      }
+      
+      // 应用规则给中心Agent
+      addLog('🔍 中心质检Agent加载规则...', 'info');
+      try {
+        const rulesRes = await fetch('/rules', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ rules_text: rulesText })
+        });
+        const rulesData = await rulesRes.json();
+        if (!rulesRes.ok) {
+          addLog(`❌ 规则加载失败: ${rulesData.error}`, 'error');
+          startBtn.disabled = false;
+          startBtn.textContent = '🚀 启动完整测试';
+          stopEventPolling();
+          return;
+        }
+        addLog(`✅ 中心Agent解析规则：${rulesData.rules_count}条 → 生成${rulesData.refined_standards}个检测标准`, 'success');
+      } catch (e) {
+        addLog(`❌ 规则应用异常: ${e.message}`, 'error');
+        startBtn.disabled = false;
+        startBtn.textContent = '🚀 启动完整测试';
+        stopEventPolling();
+        return;
+      }
+      
+      addLog('📋 反贼不知道规则，只根据人设发帖', 'info');
+      addLog('💡 提示：观察Log区域，可以看到Agent的实时讨论过程', 'info');
+      
+      try {
+        // 阶段1: 基线测试
+        addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        addLog('📊 阶段1/3: 基线测试 - 26个反贼根据人设发帖...', 'info');
+        const baselineRes = await fetch('/test-workflow/baseline', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const baselineData = await baselineRes.json();
+        if (!baselineRes.ok) {
+          addLog(`❌ 基线测试失败: ${baselineData.error}`, 'error');
+          throw new Error(baselineData.error);
+        }
+        addLog(`✅ 基线测试完成`, 'success');
+        addLog(`  🛡️ 拦截: ${baselineData.summary.detection_success}/${baselineData.summary.total_tested} (${baselineData.summary.detection_rate}%)`, 'info');
+        addLog(`  ⚠️ 绕过: ${baselineData.summary.bypass_success}条 (${baselineData.summary.bypass_rate}%)`, baselineData.summary.bypass_success > 0 ? 'warning' : 'info');
+        
+        // 阶段2: 反贼学习 + 讨论 + 再测试
+        addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        addLog('🎓 阶段2/3: 反贼互相学习讨论...', 'info');
+        addLog('🗣️ 成功绕过的反贼将向其他人分享经验', 'info');
+        
+        const adversarialRes = await fetch('/test-workflow/adversarial', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const adversarialData = await adversarialRes.json();
+        if (!adversarialRes.ok) {
+          addLog(`❌ 对抗测试失败: ${adversarialData.error}`, 'error');
+          throw new Error(adversarialData.error);
+        }
+        addLog(`✅ 演化测试完成`, 'success');
+        addLog(`  🛡️ 拦截: ${adversarialData.summary.detection_success}/${adversarialData.summary.total_tested} (${adversarialData.summary.detection_rate}%)`, 'info');
+        addLog(`  ⚠️ 绕过: ${adversarialData.summary.bypass_success}条 (${adversarialData.summary.bypass_rate}%)`, adversarialData.summary.bypass_success > 0 ? 'warning' : 'info');
+        
+        // 阶段3: 生成对比报告
+        addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        addLog('📈 阶段3/3: 生成对比报告...', 'info');
+        const analyzeRes = await fetch('/test-workflow/analyze', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const analyzeData = await analyzeRes.json();
+        if (analyzeRes.ok && analyzeData.summary) {
+          const comp = analyzeData.summary.comparison;
+          addLog(`📊 对比结果：`, 'success');
+          addLog(`  基线拦截率: ${comp.baseline_detection_rate}%`, 'info');
+          addLog(`  演化后拦截率: ${comp.evolved_detection_rate}%`, 'info');
+          addLog(`  规则鲁棒性: ${analyzeData.summary.conclusion.rule_robustness}`, comp.degradation > 10 ? 'warning' : 'success');
+        }
+        
+        addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        addLog('✅ 测试完成！点击"查看报告"查看详情', 'success');
+        const reportBtn3 = document.getElementById('viewReportBtn');
+        if (reportBtn3) reportBtn3.style.display = 'block';
+        
+      } catch (e) {
+        addLog(`❌ 测试失败: ${e.message}`, 'error');
+      } finally {
+        // 停止事件轮询
+        stopEventPolling();
+        startBtn.disabled = false;
+        startBtn.textContent = '🚀 启动完整测试';
+      }
+    }
+
+    async function runWorkflowPhase(phase, params = {}) {
+      try {
+        // 特殊处理演化阶段 - 需要轮询进度
+        if (phase === 'evolve') {
+          return await runEvolutionWithProgress(params);
+        }
+        
+        const options = getWorkflowOptions();
+        const response = await fetch(`/test-workflow/${phase}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ ...options, ...params })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          addLog(`❌ ${phase}阶段失败: ${data.error}`, 'error');
+          return null;
+        }
+        
+        // 显示阶段结果摘要
+        if (data.summary) {
+          displayPhaseSummary(phase, data.summary);
+        }
+        
+        // 更新状态显示
+        const statusDiv = document.getElementById('workflowStatus');
+        statusDiv.style.display = 'block';
+        statusDiv.textContent = `✓ ${phase}阶段完成`;
+        
+        return data;
+      } catch (e) {
+        addLog(`❌ ${phase}阶段异常: ${e.message}`, 'error');
+        return null;
+      }
+    }
+
+    async function runEvolutionWithProgress(params) {
+      // 启动演化
+      const options = getWorkflowOptions();
+      const startResponse = await fetch('/test-workflow/evolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ...options, ...params })
+      });
+      
+      const startData = await startResponse.json();
+      
+      if (!startResponse.ok) {
+        addLog(`❌ 演化启动失败: ${startData.error}`, 'error');
+        return null;
+      }
+      
+      if (startData.status === 'running') {
+        addLog('⏳ 演化已在运行中，继续等待...', 'info');
+      } else {
+        addLog(`🌱 社区演化已启动，预计运行${startData.config.estimated_duration_minutes}分钟`, 'info');
+        addLog(`   共${startData.config.total_steps}步，每步约${startData.config.step_interval_seconds}秒`, 'info');
+      }
+      
+      // 轮询进度
+      const statusDiv = document.getElementById('workflowStatus');
+      statusDiv.style.display = 'block';
+      
+      while (true) {
+        await sleep(3000); // 每3秒查询一次
+        
+        // 同时查询状态和最新关系
+        const [statusResponse, relationsResponse] = await Promise.all([
+          fetch('/test-workflow/evolve/status'),
+          fetch('/community/relations')
+        ]);
+        
+        const statusData = await statusResponse.json();
+        
+        // 更新关系线
+        if (relationsResponse.ok) {
+          const relationsData = await relationsResponse.json();
+          if (relationsData.relations) {
+            applyRelations(relationsData.relations);
+          }
+        }
+        
+        if (statusData.status === 'running') {
+          const p = statusData.progress;
+          const remainingMin = Math.ceil(p.estimated_remaining_seconds / 60);
+          statusDiv.textContent = `🌱 演化中: ${p.current_step}/${p.total_steps} (${p.percent}%) | 约${remainingMin}分钟剩余`;
+          
+          // 显示最新事件并触发闪光效果
+          if (statusData.latest_events && statusData.latest_events.length > 0) {
+            statusData.latest_events.forEach(event => {
+              // 触发闪光效果 - 神经传导
+              flashEventRelation(event);
+              
+              // 显示日志
+              let logMsg = '';
+              let logType = 'info';
+              if (event.type === 'technique_outbreak') {
+                logMsg = `⚡ 临界点爆发！${event.technique}传播率${event.adoption_rate}%`;
+                logType = 'warning';
+              } else if (event.type === 'network_evolution') {
+                logMsg = `📊 检测到${event.factions_detected}个子网络形成`;
+                logType = 'info';
+              } else if (event.type === 'group_share') {
+                logMsg = `【分享】${event.host} 传授技巧给${event.count-1}人`;
+                logType = 'success';
+              } else if (event.type === 'group_test') {
+                logMsg = `【测试】${event.actor} 测试边界`;
+                logType = 'warning';
+              } else if (event.type === 'follow') {
+                logMsg = `【关注】${event.actor} 关注了 ${event.target}`;
+                logType = 'info';
+              } else if (event.type === 'share') {
+                logMsg = `【分享】${event.actor} 向 ${event.target} 分享经验`;
+                logType = 'success';
+              } else if (event.type === 'learn') {
+                logMsg = `【学习】${event.actor} 向 ${event.target} 学习策略`;
+                logType = 'info';
+              } else if (event.type === 'test') {
+                logMsg = `【测试】${event.actor} 测试边界${event.discovered ? '（被发现）' : '（隐蔽）'}`;
+                logType = event.discovered ? 'error' : 'warning';
+              } else if (event.type === 'report') {
+                logMsg = `【举报】${event.actor} 举报了 ${event.target}`;
+                logType = 'error';
+              } else if (event.type === 'block') {
+                logMsg = `【屏蔽】${event.actor} 屏蔽了 ${event.target}`;
+                logType = 'error';
+              }
+              
+              if (logMsg) {
+                addLog(logMsg, logType);
+              }
+            });
+          }
+        } else if (statusData.status === 'completed') {
+          statusDiv.textContent = `✓ 演化完成: ${statusData.result.total_steps}步, ${statusData.result.total_events}个事件`;
+          addLog(`✅ 社区演化完成！耗时${Math.round(statusData.result.elapsed_seconds/60)}分钟`, 'success');
+          return statusData;
+        } else {
+          break;
+        }
+      }
+    }
+
+    function displayPhaseSummary(phase, summary) {
+      switch(phase) {
+        case 'baseline':
+          addLog(`  ✅ 26个反贼Agent已生成攻击帖子`, 'success');
+          addLog(`  检出率: ${summary.detection_rate || 100}% (${summary.detection_success || 0}/${summary.total_tested || 0}条被拦截)`, 'info');
+          addLog(`  绕过率: ${summary.bypass_rate || 0}% (${summary.bypass_success || 0}条绕过成功)`, summary.bypass_success > 0 ? 'warning' : 'info');
+          break;
+        case 'evolution':
+          addLog(`  演化完成: ${summary.total_events}个事件，${summary.factions_detected}个派系形成`, 'info');
+          addLog(`  平均隐蔽性: ${summary.avg_stealth}，平均可信度: ${summary.avg_credibility}`, 'info');
+          break;
+        case 'adversarial':
+          addLog(`  对抗检出率: ${summary.detection_rate}% (↓${summary.improved_evasion}人绕过成功)`, 'warning');
+          break;
+        case 'analyze':
+          const report = summary;
+          addLog(`📊 测试完成！规则鲁棒性: ${report.conclusion?.rule_robustness || 'unknown'}`, 'success');
+          addLog(`  检出率下降: ${report.comparison?.degradation || 0}% (${report.comparison?.degradation_percent || 0}%)`, 'warning');
+          if (report.recommendations && report.recommendations.length > 0) {
+            addLog(`💡 优化建议: ${report.recommendations[0].suggestion}`, 'info');
+          }
+          break;
+      }
+    }
+
+    async function checkWorkflowStatus() {
+      try {
+        const response = await fetch('/test-workflow/status');
+        const data = await response.json();
+        
+        const statusDiv = document.getElementById('workflowStatus');
+        statusDiv.style.display = 'block';
+        statusDiv.textContent = `状态: ${data.status} | 已完成: ${data.phases_completed.join(', ') || '无'} | 耗时: ${data.elapsed_time}s`;
+      } catch (e) {
+        addLog('获取工作流状态失败', 'error');
+      }
+    }
+
+    async function resetWorkflow() {
+      try {
+        await fetch('/test-workflow/reset', {method: 'POST'});
+        addLog('🔄 测试工作流已重置', 'info');
+        const workflowStatusEl = document.getElementById('workflowStatus');
+        if (workflowStatusEl) workflowStatusEl.style.display = 'none';
+        const reportBtn4 = document.getElementById('viewReportBtn');
+        if (reportBtn4) reportBtn4.style.display = 'none';
+        workflowSeed = null;
+        const seedInput = document.getElementById('workflowSeed');
+        if (seedInput) seedInput.value = '';
+      } catch (e) {
+        addLog('重置工作流失败', 'error');
+      }
+    }
+
+    async function showWorkflowReport() {
+      try {
+        // 直接从后端获取报告数据
+        const response = await fetch('/test-workflow/report');
+        
+        if (!response.ok) {
+          const error = await response.json();
+          addLog(`❌ ${error.error || '获取报告失败'}`, 'error');
+          return;
+        }
+        
+        const report = await response.json();
+        
+        // 构建报告HTML
+        const reportHTML = `
+          <div style="padding:20px;">
+            <div style="text-align:center;margin-bottom:30px;">
+              <h2 style="color:#00d4ff;margin-bottom:10px;">📊 规则鲁棒性测试报告</h2>
+              <p style="color:#4a8aaa;">测试时间: ${new Date().toLocaleString()}</p>
+            </div>
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px;">
+              <div style="background:rgba(0,40,80,0.5);padding:20px;border-radius:12px;text-align:center;">
+                <div style="font-size:36px;color:#00ff88;font-weight:300;">${report.baseline_detection_rate || '--'}%</div>
+                <div style="font-size:12px;color:#4a8aaa;margin-top:8px;">基线检出率（被拦截）</div>
+                <div style="font-size:11px;color:#666;margin-top:4px;">绕过率: ${(100 - (report.baseline_detection_rate || 0)).toFixed(1)}%</div>
+              </div>
+              <div style="background:rgba(0,40,80,0.5);padding:20px;border-radius:12px;text-align:center;">
+                <div style="font-size:36px;color:${(report.adversarial_detection_rate || 0) < 50 ? '#ff6b6b' : '#00d4ff'};font-weight:300;">${report.adversarial_detection_rate || '--'}%</div>
+                <div style="font-size:12px;color:#4a8aaa;margin-top:8px;">演化后检出率（被拦截）</div>
+                <div style="font-size:11px;color:#ff6b6b;margin-top:4px;">绕过率: ${(100 - (report.adversarial_detection_rate || 0)).toFixed(1)}%</div>
+              </div>
+            </div>
+            
+            <div style="background:rgba(0,40,80,0.3);padding:20px;border-radius:12px;margin-bottom:20px;">
+              <h3 style="color:#00d4ff;margin-bottom:15px;">📈 角色绕过能力提升</h3>
+              <div style="display:flex;align-items:center;gap:20px;">
+                <div style="flex:1;height:20px;background:rgba(0,0,0,0.3);border-radius:10px;overflow:hidden;">
+                  <div style="width:${report.degradation_percent || 0}%;height:100%;background:linear-gradient(90deg,#ff6b6b,#ffaa00);transition:width 0.5s;"></div>
+                </div>
+                <div style="font-size:24px;color:#ff6b6b;font-weight:600;">+${report.degradation_percent || 0}%</div>
+              </div>
+              <p style="color:#4a8aaa;margin-top:10px;font-size:12px;">
+                学习前绕过 ${(100 - (report.baseline_detection_rate || 0)).toFixed(1)}% → 学习后绕过 ${(100 - (report.adversarial_detection_rate || 0)).toFixed(1)}%
+                <span style="color:#ff6b6b;margin-left:10px;">⚠️ 角色变强了！您的规则需要加强</span>
+              </p>
+              <p style="color:#4a8aaa;margin-top:8px;font-size:12px;">
+                规则鲁棒性: <span style="color:${(report.rule_robustness === 'strong') ? '#00ff88' : (report.rule_robustness === 'moderate') ? '#ffaa00' : '#ff6b6b'};font-weight:600;">${report.rule_robustness || '未知'}</span>
+                | 演化影响: <span style="color:${(report.evolution_impact === 'mild') ? '#00ff88' : (report.evolution_impact === 'moderate') ? '#ffaa00' : '#ff6b6b'};font-weight:600;">${report.evolution_impact || '未知'}</span>
+              </p>
+            </div>
+
+            <div style="background:rgba(0,30,60,0.3);padding:18px;border-radius:12px;margin-bottom:20px;">
+              <h3 style="color:#00d4ff;margin-bottom:12px;">🔒 固定性与对照</h3>
+              <div style="font-size:12px;color:#4a8aaa;line-height:1.8;">
+                固定种子: <span style="color:#00d4ff;">${report.protocol?.random_seed ?? '--'}</span>
+                | 重复次数: <span style="color:#00d4ff;">${report.protocol?.repeat_runs ?? '--'}</span>
+                | 语料池规模: <span style="color:#00d4ff;">${report.protocol?.test_pool_size ?? '--'}</span>
+                | 规则版本: <span style="color:#00d4ff;">V${report.protocol?.rules_snapshot?.rules_version ?? '--'}</span>
+              </div>
+              ${report.control_comparison ? `
+                <div style="margin-top:10px;font-size:12px;color:#4a8aaa;">
+                  对照组检出率: <span style="color:#00ff88;">${report.control_comparison.control_detection_rate}%</span>
+                  | 演化组检出率: <span style="color:#ffaa00;">${report.control_comparison.evolved_detection_rate}%</span>
+                  | 差值: <span style="color:#ff6b6b;">${report.control_comparison.delta}%</span>
+                </div>
+              ` : '<div style="margin-top:10px;font-size:12px;color:#4a8aaa;">对照组未启用</div>'}
+            </div>
+
+            <!-- 攻击帖子记录 -->
+            <div style="background:rgba(0,40,80,0.3);padding:20px;border-radius:12px;margin-bottom:20px;">
+              <h3 style="color:#00d4ff;margin-bottom:15px;">📝 攻击帖子记录</h3>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px;">
+                <div style="background:rgba(0,60,120,0.3);padding:12px;border-radius:8px;text-align:center;">
+                  <div style="font-size:24px;color:#00ff88;">${report.total_baseline_posts || 0}</div>
+                  <div style="font-size:11px;color:#4a8aaa;">基线测试帖子</div>
+                </div>
+                <div style="background:rgba(0,60,120,0.3);padding:12px;border-radius:8px;text-align:center;">
+                  <div style="font-size:24px;color:#ffaa00;">${report.total_adversarial_posts || 0}</div>
+                  <div style="font-size:11px;color:#4a8aaa;">演化后帖子</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;justify-content:center;">
+                <button onclick="showPostsModal('baseline')" style="padding:8px 16px;background:rgba(0,255,136,0.2);color:#00ff88;border:1px solid #00ff88;border-radius:6px;cursor:pointer;font-size:11px;">查看基线帖子</button>
+                <button onclick="showPostsModal('adversarial')" style="padding:8px 16px;background:rgba(255,170,0,0.2);color:#ffaa00;border:1px solid #ffaa00;border-radius:6px;cursor:pointer;font-size:11px;">查看演化帖子</button>
+              </div>
+            </div>
+            
+            <div style="background:rgba(0,40,80,0.3);padding:20px;border-radius:12px;margin-bottom:20px;">
+              <h3 style="color:#00d4ff;margin-bottom:15px;">💡 优化建议</h3>
+              <ul style="color:#4a8aaa;font-size:12px;line-height:1.8;padding-left:20px;">
+                ${(report.recommendations || []).map(r => `
+                  <li style="margin-bottom:8px;">
+                    <span style="color:${r.priority === 'high' ? '#ff6b6b' : '#ffaa00'};font-weight:600;">[${r.priority === 'high' ? '紧急' : '建议'}]</span>
+                    ${r.suggestion}
+                  </li>
+                `).join('') || '<li>暂无具体建议</li>'}
+              </ul>
+            </div>
+            
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:30px;">
+              <button onclick="exportReport('json')" style="padding:10px 20px;background:#00d4ff;color:#000;border:none;border-radius:8px;cursor:pointer;font-size:12px;">📥 导出JSON</button>
+              <button onclick="exportReport('txt')" style="padding:10px 20px;background:rgba(0,200,255,0.3);color:#00d4ff;border:1px solid #00d4ff;border-radius:8px;cursor:pointer;font-size:12px;">📄 导出文本</button>
+              <button onclick="exportReport('posts')" style="padding:10px 20px;background:rgba(0,255,136,0.3);color:#00ff88;border:1px solid #00ff88;border-radius:8px;cursor:pointer;font-size:12px;">📋 导出帖子</button>
+              <button onclick="closeModal()" style="padding:10px 20px;background:rgba(255,100,100,0.3);color:#ff6b6b;border:1px solid #ff6b6b;border-radius:8px;cursor:pointer;font-size:12px;">关闭</button>
+            </div>
+          </div>
+        `;
+        
+        // 打开报告弹窗
+        document.getElementById('modalOverlay').classList.add('show');
+        document.getElementById('reportContent').innerHTML = reportHTML;
+        
+        // 保存报告数据供导出使用
+        window.currentReport = report;
+        
+      } catch (e) {
+        addLog(`❌ 查看报告失败: ${e.message}`, 'error');
+      }
+    }
+
+    async function showPostsModal(type) {
+      try {
+        const report = window.currentReport;
+        if (!report) {
+          addLog('❌ 没有报告数据', 'error');
+          return;
+        }
+        
+        const posts = type === 'baseline' ? report.baseline_posts : report.adversarial_posts;
+        const title = type === 'baseline' ? '基线测试攻击帖子' : '演化后攻击帖子';
+        
+        if (!posts || posts.length === 0) {
+          addLog(`❌ 没有${title}记录`, 'error');
+          return;
+        }
+        
+        // 构建帖子列表HTML - 包含目标关键词、绕过变体、检测详情
+        const postsHTML = posts.map((post, idx) => `
+          <div style="background:rgba(0,30,60,0.5);padding:15px;border-radius:10px;margin-bottom:12px;border-left:3px solid ${post.risk_detected ? '#ff6b6b' : '#00ff88'};">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <span style="font-weight:600;color:#00d4ff;">${idx + 1}. ${post.persona_name}</span>
+              <span style="font-size:10px;padding:3px 8px;border-radius:10px;background:${post.risk_detected ? 'rgba(255,107,107,0.3)' : 'rgba(0,255,136,0.3)'};color:${post.risk_detected ? '#ff6b6b' : '#00ff88'};">
+                ${post.risk_detected ? '🚫 被检出' : '✓ 绕过成功'}
+              </span>
+            </div>
+            <div style="font-size:11px;color:#4a8aaa;margin-bottom:8px;">
+              类别: ${post.category} | 技巧: <span style="color:#ffaa00;">${post.technique_used || '无'}</span> | 隐蔽性: ${post.stealth_score}
+            </div>
+            ${post.target_keyword ? `
+            <div style="background:rgba(255,100,100,0.1);padding:8px;border-radius:6px;margin-bottom:8px;font-size:11px;">
+              <span style="color:#ff6b6b;">🎯 目标关键词:</span> <span style="color:#fff;">${post.target_keyword}</span>
+              <span style="margin-left:10px;color:#ffaa00;">→ 变体:</span> <span style="color:#00ff88;">${post.bypass_variant || '无'}</span>
+            </div>
+            ` : ''}
+            <div style="background:rgba(0,0,0,0.3);padding:12px;border-radius:8px;margin-bottom:8px;">
+              <div style="font-size:10px;color:#4a8aaa;margin-bottom:5px;">📝 发帖内容:</div>
+              <div style="font-size:12px;color:#e0f8ff;line-height:1.6;">${type === 'adversarial' ? (post.evolved_post || post.post_content) : post.post_content}</div>
+            </div>
+            ${post.risk_detected ? `
+            <div style="background:rgba(255,100,100,0.1);padding:8px;border-radius:6px;font-size:11px;">
+              <span style="color:#ff6b6b;">⚠️ 检测原因:</span> <span style="color:#fff;">${post.detection_reason || '规则命中'}</span>
+              ${post.hit_keywords && post.hit_keywords.length > 0 ? `| 命中: <span style="color:#ff6b6b;">${post.hit_keywords.join(', ')}</span>` : ''}
+            </div>
+            ` : `
+            <div style="background:rgba(0,255,136,0.1);padding:8px;border-radius:6px;font-size:11px;">
+              <span style="color:#00ff88;">✓ 成功绕过检测</span>
+              ${post.bypass_variant ? `- 变体 "${post.bypass_variant}" 未被识别` : ''}
+            </div>
+            `}
+            ${type === 'adversarial' && post.techniques_learned && post.techniques_learned.length > 0 ? `
+            <div style="font-size:10px;color:#4a8aaa;margin-top:8px;">
+              已学习技巧: <span style="color:#00d4ff;">${post.techniques_learned.join(', ')}</span>
+              ${post.improved ? ' | <span style="color:#00ff88;font-weight:600;">★ 演化后成功绕过</span>' : ''}
+            </div>
+            ` : ''}
+          </div>
+        `).join('');
+        
+        const modalHTML = `
+          <div style="padding:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+              <h2 style="color:#00d4ff;">📝 ${title} (${posts.length}条)</h2>
+              <button onclick="showWorkflowReport()" style="padding:6px 12px;background:rgba(0,200,255,0.3);color:#00d4ff;border:1px solid #00d4ff;border-radius:6px;cursor:pointer;font-size:11px;">返回报告</button>
+            </div>
+            <div style="max-height:60vh;overflow-y:auto;padding-right:10px;">
+              ${postsHTML}
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;">
+              <button onclick="exportPosts('${type}')" style="padding:10px 20px;background:#00d4ff;color:#000;border:none;border-radius:8px;cursor:pointer;font-size:12px;">📥 导出这些帖子</button>
+              <button onclick="closeModal()" style="padding:10px 20px;background:rgba(255,100,100,0.3);color:#ff6b6b;border:1px solid #ff6b6b;border-radius:8px;cursor:pointer;font-size:12px;">关闭</button>
+            </div>
+          </div>
+        `;
+        
+        document.getElementById('reportContent').innerHTML = modalHTML;
+        
+      } catch (e) {
+        addLog(`❌ 查看帖子失败: ${e.message}`, 'error');
+      }
+    }
+
+    function exportPosts(type) {
+      const report = window.currentReport;
+      if (!report) {
+        addLog('❌ 没有报告数据', 'error');
+        return;
+      }
+      
+      const posts = type === 'baseline' ? report.baseline_posts : report.adversarial_posts;
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const filename = `attack_posts_${type}_${timestamp}.json`;
+      
+      const dataStr = JSON.stringify(posts, null, 2);
+      const blob = new Blob([dataStr], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addLog(`✅ 已导出${posts.length}条帖子`, 'success');
+    }
+    
+    function exportReport(format) {
+      if (!window.currentReport) {
+        addLog('❌ 没有可导出的报告', 'error');
+        return;
+      }
+      
+      const report = window.currentReport;
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      
+      if (format === 'json') {
+        const dataStr = JSON.stringify(report, null, 2);
+        const blob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `rule_test_report_${timestamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        addLog('✅ 报告已导出为JSON', 'success');
+      } else if (format === 'posts') {
+        // 导出所有帖子
+        const allPosts = {
+          baseline_posts: report.baseline_posts || [],
+          adversarial_posts: report.adversarial_posts || [],
+          summary: {
+            total_baseline: (report.baseline_posts || []).length,
+            total_adversarial: (report.adversarial_posts || []).length,
+            baseline_detection_rate: report.baseline_detection_rate,
+            adversarial_detection_rate: report.adversarial_detection_rate
+          }
+        };
+        const dataStr = JSON.stringify(allPosts, null, 2);
+        const blob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attack_posts_all_${timestamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        addLog('✅ 所有帖子已导出', 'success');
+      } else if (format === 'txt') {
+        let text = `规则鲁棒性测试报告\n`;
+        text += `==================\n\n`;
+        text += `测试时间: ${new Date().toLocaleString()}\n`;
+        text += `基线检出率: ${report.baseline_detection_rate || '--'}%\n`;
+        text += `演化后检出率: ${report.adversarial_detection_rate || '--'}%\n`;
+        text += `规则衰减: -${report.degradation_percent || 0}%\n`;
+        text += `规则鲁棒性: ${report.rule_robustness || '未知'}\n`;
+        text += `演化影响: ${report.evolution_impact || '未知'}\n\n`;
+        
+        text += `固定性与对照:\n`;
+        text += `- 随机种子: ${report.protocol?.random_seed ?? '--'}\n`;
+        text += `- 重复次数: ${report.protocol?.repeat_runs ?? '--'}\n`;
+        text += `- 语料池规模: ${report.protocol?.test_pool_size ?? '--'}\n`;
+        text += `- 规则版本: V${report.protocol?.rules_snapshot?.rules_version ?? '--'}\n`;
+        if (report.control_comparison) {
+          text += `- 对照组检出率: ${report.control_comparison.control_detection_rate}%\n`;
+          text += `- 演化组检出率: ${report.control_comparison.evolved_detection_rate}%\n`;
+          text += `- 差值: ${report.control_comparison.delta}%\n`;
+        } else {
+          text += `- 对照组: 未启用\n`;
+        }
+        text += `\n`;
+
+        text += `攻击帖子统计:\n`;
+        text += `- 基线测试帖子: ${report.total_baseline_posts || 0}条\n`;
+        text += `- 演化后帖子: ${report.total_adversarial_posts || 0}条\n\n`;
+
+        text += `优化建议:\n`;
+        (report.recommendations || []).forEach((r, i) => {
+          text += `${i + 1}. [${r.priority === 'high' ? '紧急' : '建议'}] ${r.suggestion}\n`;
+        });
+        
+        // 添加帖子样本
+        text += `\n========== 基线测试帖子样本 ==========\n\n`;
+        (report.baseline_posts || []).slice(0, 10).forEach((post, i) => {
+          text += `[${i + 1}] ${post.persona_name} (${post.category})\n`;
+          text += `帖子: ${post.post_content}\n`;
+          text += `技巧: ${post.technique_used || '无'}\n`;
+          text += `结果: ${post.risk_detected ? '被检出' : '绕过成功'}\n\n`;
+        });
+        
+        text += `\n========== 演化后帖子样本 ==========\n\n`;
+        (report.adversarial_posts || []).slice(0, 10).forEach((post, i) => {
+          text += `[${i + 1}] ${post.persona_name} (${post.category})\n`;
+          text += `帖子: ${post.evolved_post || post.post_content}\n`;
+          text += `技巧: ${post.technique_used || '无'}\n`;
+          text += `已学习: ${(post.techniques_learned || []).join(', ') || '无'}\n`;
+          text += `结果: ${post.risk_detected ? '被检出' : '绕过成功'}${post.improved ? ' (改进成功)' : ''}\n\n`;
+        });
+        
+        const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `rule_test_report_${timestamp}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        addLog('✅ 报告已导出为文本', 'success');
+      }
+    }
+    
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.remove('show');
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function rotateScene(angleX, angleY) {
+      // ★★★ 只需要旋转geodesicGroup，所有子对象（Agent、关系线）会自动跟随 ★★★
+      if (geodesicGroup) {
+        geodesicGroup.rotation.y += angleY;
+        geodesicGroup.rotation.x += angleX;
+      }
+    }
+
+    function updateHover(e) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      
+      // 首先检查Agent节点
+      const nodeIntersects = raycaster.intersectObjects(nodeMeshes, true);
+      if (nodeIntersects.length > 0) {
+        let mesh = nodeIntersects[0].object;
+        while (mesh.parent && !mesh.userData.id) mesh = mesh.parent;
+        
+        if (mesh.userData && mesh.userData.id) {
+          if (hoveredMesh !== mesh) {
+            hoveredMesh = mesh;
+            showTooltip(mesh.userData, e.clientX, e.clientY);
+          } else {
+            moveTooltip(e.clientX, e.clientY);
+          }
+          renderer.domElement.style.cursor = 'pointer';
+          return;
+        }
+      }
+      
+      // 检查网格空位
+      const gridIntersects = raycaster.intersectObjects(gridPointMeshes, true);
+      if (gridIntersects.length > 0) {
+        let mesh = gridIntersects[0].object;
+        while (mesh.parent && !mesh.userData.type) mesh = mesh.parent;
+        
+        if (mesh.userData && mesh.userData.type === 'grid_point') {
+          if (hoveredMesh !== mesh) {
+            hoveredMesh = mesh;
+            showGridPointTooltip(mesh.userData, e.clientX, e.clientY);
+          } else {
+            moveTooltip(e.clientX, e.clientY);
+          }
+          renderer.domElement.style.cursor = 'pointer';
+          return;
+        }
+      }
+      
+      hoveredMesh = null;
+      hideTooltip();
+      renderer.domElement.style.cursor = 'grab';
+    }
+    
+    function showGridPointTooltip(pointData, x, y) {
+      const tooltip = document.getElementById('tooltip');
+      document.getElementById('tooltipName').textContent = '⊕ 空位 #' + pointData.index;
+      document.getElementById('tooltipCategory').textContent = '可配置新角色';
+      document.getElementById('tooltipDesc').textContent = '点击此位置可以添加新的反贼Agent';
+      tooltip.style.left = (x + 15) + 'px';
+      tooltip.style.top = (y + 15) + 'px';
+      tooltip.classList.add('show');
+    }
+
+    function showTooltip(nodeData, x, y) {
+      const tooltip = document.getElementById('tooltip');
+      document.getElementById('tooltipName').textContent = nodeData.name;
+      document.getElementById('tooltipCategory').textContent = nodeData.category;
+      document.getElementById('tooltipDesc').textContent = nodeData.description;
+      tooltip.style.left = (x + 15) + 'px';
+      tooltip.style.top = (y + 15) + 'px';
+      tooltip.classList.add('show');
+    }
+
+    function moveTooltip(x, y) {
+      const tooltip = document.getElementById('tooltip');
+      tooltip.style.left = (x + 15) + 'px';
+      tooltip.style.top = (y + 15) + 'px';
+    }
+
+    function hideTooltip() {
+      document.getElementById('tooltip').classList.remove('show');
+    }
+
+    function handleClick(e) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      
+      // 首先检查是否点击了Agent节点
+      const nodeIntersects = raycaster.intersectObjects(nodeMeshes, true);
+      if (nodeIntersects.length > 0) {
+        let mesh = nodeIntersects[0].object;
+        while (mesh.parent && !mesh.userData.id) mesh = mesh.parent;
+        
+        if (mesh.userData && mesh.userData.id) {
+          selectNode(mesh.userData, mesh);
+          createRippleEffect(mesh.position, mesh.userData.color);
+          return;
+        }
+      }
+      
+      // 检查是否点击了网格空位
+      const gridIntersects = raycaster.intersectObjects(gridPointMeshes, true);
+      if (gridIntersects.length > 0) {
+        let mesh = gridIntersects[0].object;
+        while (mesh.parent && !mesh.userData.type) mesh = mesh.parent;
+        
+        if (mesh.userData && mesh.userData.type === 'grid_point') {
+          selectGridPoint(mesh.userData, mesh);
+          createRippleEffect(mesh.position, 0x00ffaa);
+        }
+      }
+    }
+    
+    // 选中网格空位 - 显示配置新角色的界面
+    let selectedGridPoint = null;
+    
+    function selectGridPoint(pointData, mesh) {
+      selectedGridPoint = pointData;
+      selectedNode = null;
+      
+      // 重置所有Agent的选中状态
+      nodeMeshes.forEach(m => {
+        if (m.userData.selected) {
+          m.userData.selected = false;
+          m.scale.setScalar(1);
+        }
+      });
+      
+      // 高亮选中的空位
+      gridPointMeshes.forEach(pm => {
+        pm.scale.setScalar(pm === mesh ? 1.5 : 1);
+      });
+      
+      // 显示配置新角色的界面
+      showNewAgentConfig(pointData);
+      
+      addLog(`📍 选中空位 #${pointData.index}，可配置新角色`, 'info');
+    }
+    
+    // 显示新角色配置界面
+    function showNewAgentConfig(pointData) {
+      document.getElementById('nodeName').textContent = '⊕ 空位 #' + pointData.index;
+      document.getElementById('nodeCategory').textContent = '点击配置新角色';
+      document.getElementById('nodeDesc').textContent = '此位置可以添加新的反贼Agent。点击下方按钮开始配置。';
+      
+      // 显示配置按钮
+      const relationsDiv = document.getElementById('nodeRelations');
+      relationsDiv.innerHTML = `
+        <button class="btn btn-primary" onclick="openNewAgentDialog()" style="margin-top: 10px;">
+          ➕ 配置新角色
+        </button>
+        <div style="margin-top: 12px; font-size: 11px; color: #5a8aaa;">
+          位置坐标: (${pointData.position.x.toFixed(0)}, ${pointData.position.y.toFixed(0)}, ${pointData.position.z.toFixed(0)})
+        </div>
+      `;
+      
+      // 隐藏记忆区域
+      document.getElementById('nodeMemory').innerHTML = '';
+      
+      // 隐藏编辑按钮
+      const editBtn = document.getElementById('editAgentBtn');
+      if (editBtn) editBtn.style.display = 'none';
+    }
+    
+    // 打开新角色配置对话框
+    function openNewAgentDialog() {
+      if (!selectedGridPoint) {
+        addLog('❌ 请先选择一个空位', 'error');
+        return;
+      }
+      
+      // 显示模态框
+      const modal = document.getElementById('reportModal');
+      const modalTitle = modal.querySelector('.modal-title');
+      const modalBody = modal.querySelector('.modal-body');
+      
+      modalTitle.textContent = '🎭 配置新角色';
+      modalBody.innerHTML = `
+        <div class="report-section">
+          <div class="report-section-title">
+            <span class="icon">👤</span> 角色基本信息
+          </div>
+          <div class="form-group">
+            <label>角色名称</label>
+            <input type="text" id="newAgentName" class="form-group textarea" style="min-height: auto;" 
+                   placeholder="如：技术钻空者、情感操纵师...">
+          </div>
+          <div class="form-group">
+            <label>角色分类</label>
+            <select id="newAgentCategory" class="form-group select">
+              <option value="技术流">技术流 - 利用技术手段绕过</option>
+              <option value="话术派">话术派 - 语言伪装和隐喻</option>
+              <option value="社工党">社工党 - 社会工程学攻击</option>
+              <option value="内容农场">内容农场 - 批量生成内容</option>
+              <option value="水军">水军 - 协调刷屏攻击</option>
+              <option value="自定义">自定义分类</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>角色描述</label>
+            <textarea id="newAgentDesc" class="form-group textarea" rows="3"
+                      placeholder="描述这个角色的特点、动机和行为模式..."></textarea>
+          </div>
+        </div>
+        
+        <div class="report-section warning">
+          <div class="report-section-title">
+            <span class="icon">🔧</span> 攻击技巧配置
+          </div>
+          <div class="form-group">
+            <label>隐蔽性 (0-1)</label>
+            <input type="range" id="newAgentStealth" min="0" max="1" step="0.1" value="0.5"
+                   style="width: 100%;" oninput="document.getElementById('stealthVal').textContent=this.value">
+            <span id="stealthVal" style="color: #00d4ff;">0.5</span>
+          </div>
+          <div class="form-group">
+            <label>可信度 (0-1)</label>
+            <input type="range" id="newAgentCredibility" min="0" max="1" step="0.1" value="0.5"
+                   style="width: 100%;" oninput="document.getElementById('credVal').textContent=this.value">
+            <span id="credVal" style="color: #00d4ff;">0.5</span>
+          </div>
+          <div class="form-group">
+            <label>攻击技巧（逗号分隔）</label>
+            <textarea id="newAgentTechniques" class="form-group textarea" rows="2"
+                      placeholder="同音字替换, 拼音混淆, 反讽, emoji隐喻..."></textarea>
+          </div>
+        </div>
+        
+        <div style="display: flex; gap: 12px; margin-top: 20px;">
+          <button class="btn btn-primary" onclick="createNewAgent()" style="flex: 1;">
+            ✅ 创建角色
+          </button>
+          <button class="btn btn-secondary" onclick="closeModal()" style="flex: 1;">
+            取消
+          </button>
+        </div>
+      `;
+      
+      modal.classList.add('show');
+    }
+    
+    // 创建新角色
+    async function createNewAgent() {
+      const name = document.getElementById('newAgentName').value.trim();
+      const category = document.getElementById('newAgentCategory').value;
+      const description = document.getElementById('newAgentDesc').value.trim();
+      const stealth = parseFloat(document.getElementById('newAgentStealth').value);
+      const credibility = parseFloat(document.getElementById('newAgentCredibility').value);
+      const techniques = document.getElementById('newAgentTechniques').value.split(',').map(t => t.trim()).filter(t => t);
+      
+      if (!name) {
+        addLog('❌ 请输入角色名称', 'error');
+        return;
+      }
+      
+      const newId = 'custom_' + Date.now();
+      const position = selectedGridPoint.position;
+      const color = categoryColors[category] || 0x00d4ff;
+      
+      // 创建新角色数据
+      const newNodeData = {
+        id: newId,
+        name: name,
+        category: category,
+        description: description || `自定义角色: ${name}`,
+        patterns: techniques.length > 0 ? techniques : ['通用攻击'],
+        position: position.clone(),
+        gridIndex: selectedGridPoint.index,
+        color: color,
+        visible: true,
+        testCount: 0,
+        riskCount: 0,
+        isCustom: true,
+        stealth: stealth,
+        credibility: credibility,
+        techniques: techniques
+      };
+      
+      // 添加到数据
+      nodesData.push(newNodeData);
+      personas.push({
+        id: newId,
+        name: name,
+        category: category,
+        description: newNodeData.description,
+        behavior_patterns: newNodeData.patterns
+      });
+      
+      // 创建3D节点
+      const mesh = createNode(newNodeData);
+      nodeMeshes.push(mesh);
+      scene.add(mesh);
+      
+      // 移除对应的空位点
+      const gridPointIndex = gridPointMeshes.findIndex(pm => 
+        pm.userData.index === selectedGridPoint.index
+      );
+      if (gridPointIndex !== -1) {
+        const gridPoint = gridPointMeshes[gridPointIndex];
+        scene.remove(gridPoint);
+        gridPointMeshes.splice(gridPointIndex, 1);
+      }
+      
+      // 更新统计
+      updateStats();
+      initFilters();
+      
+      // 关闭模态框
+      closeModal();
+      
+      // 选中新创建的节点
+      selectNode(newNodeData, mesh);
+      createRippleEffect(position, color);
+      
+      addLog(`✅ 新角色「${name}」创建成功！`, 'success');
+      addLog(`📍 位置: 空位 #${selectedGridPoint.index}`, 'info');
+      
+      selectedGridPoint = null;
+    }
+    
+    function closeModal() {
+      document.getElementById('reportModal').classList.remove('show');
+    }
+
+    function createRippleEffect(position, color) {
+      // 创建流畅的涟漪效果 - 更快的响应
+      const ringCount = 2; // 减少环数量，更简洁
+      
+      for (let i = 0; i < ringCount; i++) {
+        setTimeout(() => {
+          // 使用更薄的环，更精致
+          const ringGeo = new THREE.RingGeometry(0.5, 1.5, 32);
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending
+          });
+          const ring = new THREE.Mesh(ringGeo, ringMat);
+          ring.position.copy(position);
+          ring.lookAt(camera.position);
+          scene.add(ring);
+          
+          const startTime = Date.now();
+          const duration = 600; // 缩短动画时间到600ms
+          
+          const animateRing = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = elapsed / duration;
+            
+            if (progress < 1) {
+              // 使用缓动函数，更平滑
+              const easeProgress = 1 - Math.pow(1 - progress, 3);
+              const scale = 1 + easeProgress * 15; // 更小的缩放范围
+              ring.scale.setScalar(scale);
+              ring.material.opacity = 0.9 * (1 - easeProgress);
+              requestAnimationFrame(animateRing);
+            } else {
+              scene.remove(ring);
+              ring.geometry.dispose();
+              ring.material.dispose();
+            }
+          };
+          animateRing();
+        }, i * 80); // 减少间隔到80ms
+      }
+    }
+
+    function selectNode(nodeData, mesh) {
+      nodeMeshes.forEach(m => {
+        if (m.userData.selected) {
+          m.userData.selected = false;
+          m.scale.setScalar(1);
+        }
+      });
+      
+      nodeData.selected = true;
+      mesh.userData.selected = true;
+      mesh.scale.setScalar(1.6);
+      selectedNode = nodeData;
+      
+      edgeLines.forEach(line => {
+        const isRelated = line.userData.from === nodeData.id || line.userData.to === nodeData.id;
+        line.material.opacity = isRelated ? 0.6 : 0.1;
+      });
+      
+      document.getElementById('nodeName').textContent = nodeData.name;
+      document.getElementById('nodeCategory').textContent = nodeData.category;
+      document.getElementById('nodeDesc').textContent = nodeData.description;
+      
+      // 显示详细统计区域
+      const agentStats = document.getElementById('agentStats');
+      if (agentStats) agentStats.style.display = 'grid';
+      
+      // 显示编辑按钮
+      const editBtn = document.getElementById('editAgentBtn');
+      if (editBtn) editBtn.style.display = 'inline-block';
+      
+      // 如果在编辑模式，退出编辑模式
+      const nodeInfoEdit = document.getElementById('nodeInfoEdit');
+      if (nodeInfoEdit && nodeInfoEdit.style.display === 'block') {
+        cancelEditAgent();
+      }
+      
+      // 计算并显示统计信息
+      const relatedEdges = edgesData.filter(e => e.from === nodeData.id || e.to === nodeData.id);
+      const outDegree = relatedEdges.filter(e => e.from === nodeData.id).length;
+      const inDegree = relatedEdges.filter(e => e.to === nodeData.id).length;
+      
+      document.getElementById('statTechniques').textContent = nodeData.patterns ? nodeData.patterns.length : '-';
+      document.getElementById('statInfluence').textContent = `${outDegree + inDegree} (${outDegree}出/${inDegree}入)`;
+      document.getElementById('statStealth').textContent = '0.5'; // 默认值，可以从后端获取
+      document.getElementById('statCredibility').textContent = '0.5'; // 默认值
+      
+      // 从后端获取详细声誉数据
+      loadAgentReputation(nodeData.id);
+      
+      const nodeRelations = document.getElementById('nodeRelations');
+      
+      if (relatedEdges.length > 0) {
+        nodeRelations.innerHTML = relatedEdges.slice(0, 8).map(e => {
+          const otherNode = nodesData.find(n => n.id === (e.from === nodeData.id ? e.to : e.from));
+          const dir = e.from === nodeData.id ? '→' : '←';
+          return `<div class="relation-item">
+            <span class="relation-type ${e.type}">${e.label}</span>
+            ${dir} ${otherNode ? otherNode.name : '?'}
+          </div>`;
+        }).join('') + (relatedEdges.length > 8 ? `<div style="font-size:9px;color:#4a8aaa;margin-top:6px;">...还有${relatedEdges.length-8}个关系</div>` : '');
+      } else {
+        nodeRelations.innerHTML = '<div style="font-size:11px;color:#4a8aaa;">暂无社交关系</div>';
+      }
+
+      const nodeMemory = document.getElementById('nodeMemory');
+      nodeMemory.innerHTML = '<div style="font-size:11px;color:#4a8aaa;">记忆加载中...</div>';
+      loadMemory(nodeData.id);
+      
+      addLog(`📋 查看角色详情: ${nodeData.name} (${nodeData.category})`, 'info');
+    }
+
+    async function loadAgentReputation(personaId) {
+      try {
+        const res = await fetch(`/community/reputation/${personaId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.reputation) {
+            document.getElementById('statStealth').textContent = (data.reputation.stealth_score || 0.5).toFixed(2);
+            document.getElementById('statCredibility').textContent = (data.reputation.technique_credibility || 0.5).toFixed(2);
+            document.getElementById('statTechniques').textContent = (data.reputation.adopted_techniques || []).length;
+          }
+        }
+      } catch (e) {
+        // 使用默认值
+      }
+    }
+
+    function resetView() {
+      camera.position.set(0, 0, 750);
+      if (geodesicGroup) {
+        geodesicGroup.rotation.set(0, 0, 0);
+      }
+      filterCategory('all');
+      edgeLines.forEach(line => { line.material.opacity = 0.15; });
+    }
+
+    function clearData() {
+      testResults = [];
+      stats = { tests: 0, risks: 0 };
+      nodesData.forEach(n => { n.testCount = 0; n.riskCount = 0; });
+      updateStats();
+      document.getElementById('resultArea').classList.remove('show');
+      addLog('测试数据已清除', 'info');
+    }
+
+    async function simulateStep() {
+      try {
+        const res = await fetch('/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ steps: 1 })
+        });
+        const data = await res.json();
+        if (!res.ok) { addLog(`演化失败: ${data.error || '未知错误'}`, 'error'); return; }
+
+        if (data.relations) {
+          applyRelations(data.relations);
+        }
+        if (data.events && data.events.length) {
+          data.events.forEach(e => {
+            let logMsg = '';
+            let logType = 'info';
+            
+            // 神经传导效果 - 关系线闪光
+            flashEventRelation(e);
+            
+            switch(e.type) {
+              case 'follow':
+                logMsg = `【关注】${e.actor} 关注了 ${e.target}`;
+                logType = 'info';
+                break;
+              case 'share':
+                logMsg = `【分享】${e.actor} 向 ${e.target} 分享经验`;
+                logType = 'success';
+                break;
+              case 'learn':
+                logMsg = `【学习】${e.actor} 向 ${e.target} 学习策略`;
+                logType = 'info';
+                break;
+              case 'test':
+                logMsg = `【测试】${e.actor} 测试边界${e.discovered ? '（被发现）' : '（隐蔽）'}`;
+                logType = e.discovered ? 'error' : 'warning';
+                break;
+              case 'report':
+                logMsg = `【举报】${e.actor} 举报了 ${e.target}`;
+                logType = 'error';
+                break;
+              case 'block':
+                logMsg = `【屏蔽】${e.actor} 屏蔽了 ${e.target}`;
+                logType = 'error';
+                break;
+              default:
+                if (e.action && logMsg === '') {
+                  logMsg = `【事件】${JSON.stringify(e).slice(0, 80)}`;
+                }
+            }
+            
+            if (logMsg) {
+              addLog(logMsg, logType);
+            }
+          });
+        }
+      } catch (e) {
+        addLog(`演化异常: ${e.message}`, 'error');
+      }
+    }
+
+    function toggleSimulation() {
+      const btn = document.getElementById('simulateBtn');
+      if (simulationRunning) {
+        clearInterval(simulationTimer);
+        simulationTimer = null;
+        simulationRunning = false;
+        btn.textContent = '▶ 社区演化';
+        addLog('社区演化已暂停', 'info');
+        return;
+      }
+      simulationRunning = true;
+      btn.textContent = '⏸ 暂停演化';
+      addLog('社区演化开始运行', 'info');
+      simulateStep();
+      simulationTimer = setInterval(simulateStep, 2000);
+    }
+
+    function flashEventRelation(event) {
+      if (!event) return;
+
+      // 兼容旧的群体事件格式
+      if (event.type && event.type.startsWith('group_')) {
+        if (event.type === 'group_share' && event.host_id && event.participant_ids) {
+          event.participant_ids.forEach(pid => {
+            flashRelation(event.host_id, pid, 'share');
+          });
+          return;
+        }
+        if (event.type === 'group_test' && event.actor_id) {
+          const testRelations = edgesData.filter(ed =>
+            (ed.from === event.actor_id || ed.to === event.actor_id) && ed.type === 'test'
+          );
+          testRelations.forEach(rel => {
+            const otherId = rel.from === event.actor_id ? rel.to : rel.from;
+            flashRelation(event.actor_id, otherId, 'test');
+          });
+          return;
+        }
+        if (event.type === 'group_learn' && event.actor_id && event.targets) {
+          event.targets.forEach((target, idx) => {
+            setTimeout(() => {
+              const targetNode = nodesData.find(n => n.name === target);
+              if (targetNode) {
+                flashRelation(event.actor_id, targetNode.id, 'learn');
+              }
+            }, idx * 100);
+          });
+          return;
+        }
+      }
+
+      const relType = event.relation_type || event.type || 'follow';
+      let fromId = event.actor_id;
+      let toId = event.target_id;
+
+      if ((!fromId || !toId) && event.actor && event.target) {
+        const fromNode = nodesData.find(n => n.name === event.actor);
+        const toNode = nodesData.find(n => n.name === event.target);
+        fromId = fromId || fromNode?.id;
+        toId = toId || toNode?.id;
+      }
+
+      if (fromId && toId) {
+        flashRelation(fromId, toId, relType);
+        const riskTypes = ['report', 'block', 'target'];
+        triggerFlow(fromId, toId, riskTypes.includes(relType));
+      }
+    }
+
+    function flashRelation(fromId, toId, type) {
+      const line = edgeLines.find(l => l.userData.from === fromId && l.userData.to === toId && l.userData.type === type);
+      if (!line) return;
+      const baseOpacity = line.material.opacity;
+      line.material.opacity = 0.9;
+      const color = relationColors[type] || 0x00d4ff;
+      line.material.color.setHex(color);
+      setTimeout(() => {
+        line.material.opacity = baseOpacity;
+      }, 300);
+    }
+
+    function applyRelations(newRelations) {
+      relationsData = newRelations;
+      createStraightEdges();
+      filterCategory(currentFilter);
+      updateStats();
+    }
+
+    async function applyRules() {
+      const rulesText = document.getElementById('rulesText').value || '';
+      try {
+        const res = await fetch('/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rules_text: rulesText })
+        });
+        const data = await res.json();
+        if (!res.ok) { addLog(`规则应用失败: ${data.error || '未知错误'}`, 'error'); return; }
+        updateRulesStatus(data.rules_count, data.rules_version);
+        addLog(`规则已应用：${data.rules_count} 条`, 'success');
+      } catch (e) {
+        addLog(`规则应用异常: ${e.message}`, 'error');
+      }
+    }
+
+    async function refreshRules() {
+      try {
+        const res = await fetch('/rules');
+        const data = await res.json();
+        updateRulesStatus(data.rules_count, data.rules_version);
+      } catch (e) {
+        updateRulesStatus(0, 0);
+      }
+    }
+
+    function updateRulesStatus(count, version) {
+      const el = document.getElementById('rulesStatus');
+      if (!el) return;
+      if (!count) {
+        el.textContent = '未加载规则';
+        return;
+      }
+      el.textContent = `规则版本 V${version} · 共 ${count} 条`;
+    }
+
+    function initCommunityControls() {
+      const variantSelect = document.getElementById('variantCount');
+      const edgeSelect = document.getElementById('edgeDensity');
+      if (!variantSelect || !edgeSelect || !communityConfig) return;
+      variantSelect.value = String(communityConfig.variant_count || 4);
+      edgeSelect.value = String(communityConfig.extra_edges_per_node || 2);
+    }
+
+    async function rebuildCommunity() {
+      const variantCount = parseInt(document.getElementById('variantCount').value, 10);
+      const edgeDensity = parseInt(document.getElementById('edgeDensity').value, 10);
+      addLog('重建社区中...', 'info');
+      try {
+        const res = await fetch('/community/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            variant_count: variantCount,
+            extra_edges_per_node: edgeDensity,
+            cross_category_ratio: 0.15,
+            seed: Math.floor(Math.random() * 100000)
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) { addLog(`重建失败: ${data.error || '未知错误'}`, 'error'); return; }
+        addLog(`社区已重建: ${data.personas} 个用户, ${data.relations} 条关系`, 'success');
+        location.reload();
+      } catch (e) {
+        addLog(`重建异常: ${e.message}`, 'error');
+      }
+    }
+
+    // ========== 动画 ==========
+    let time = 0;
+    const autoRotateSpeed = 0.0003;  // 自动旋转速度
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      time += 0.016;
+      
+      // 节点呼吸效果
+      nodeMeshes.forEach((mesh, i) => {
+        if (!mesh.userData.selected) {
+          const breathe = 1 + Math.sin(time * 1.5 + i * 0.2) * 0.1;
+          mesh.scale.setScalar(breathe);
+        }
+        // 光晕脉冲
+        if (mesh.children[1]) {
+          mesh.children[1].material.opacity = 0.5 + Math.sin(time * 2 + i * 0.3) * 0.2;
+        }
+      });
+      
+      // ★★★ 整个geodesicGroup一起旋转（包含网格线、Agent、关系线）★★★
+      if (geodesicGroup) {
+        geodesicGroup.rotation.y += autoRotateSpeed;
+      }
+      
+      // 更新中心质检Agent动画
+      updateCentralAgent();
+      
+      // 更新数据流
+      updateActiveFlows();
+      
+      renderer.render(scene, camera);
+    }
+
+    function updateActiveFlows() {
+      activeFlows = activeFlows.filter(flow => {
+        flow.progress += 0.03;
+        if (flow.progress >= 1) {
+          scene.remove(flow.particle);
+          flow.particle.geometry.dispose();
+          flow.particle.material.dispose();
+          return false;
+        }
+        
+        const t = flow.progress;
+        const pos = new THREE.Vector3().lerpVectors(flow.from, flow.to, t);
+        flow.particle.position.copy(pos);
+        flow.particle.material.opacity = Math.sin(t * Math.PI);
+        
+        return true;
+      });
+    }
+
+    function triggerFlow(fromId, toId, isRisk) {
+      const fromNode = nodesData.find(n => n.id === fromId);
+      const toPos = toId === 'target' ? new THREE.Vector3(0, 0, 0) : nodesData.find(n => n.id === toId)?.position;
+      
+      if (!fromNode || !toPos) return;
+      
+      const color = isRisk ? 0xaa66ff : 0x00d4ff;
+      
+      const geometry = new THREE.SphereGeometry(4, 12, 12);
+      const material = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 1,
+        blending: THREE.AdditiveBlending
+      });
+      const particle = new THREE.Mesh(geometry, material);
+      particle.position.copy(fromNode.position);
+      scene.add(particle);
+      
+      activeFlows.push({
+        from: fromNode.position.clone(),
+        to: toPos.clone(),
+        progress: 0,
+        particle: particle,
+        isRisk: isRisk
+      });
+    }
+
+    function addLog(msg, type = 'info') {
+      const logArea = document.getElementById('logArea');
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = `log-item ${type}`;
+      div.innerHTML = `<span class="log-time">[${time}]</span>${msg}`;
+      logArea.insertBefore(div, logArea.firstChild);
+      if (logArea.children.length > 80) logArea.removeChild(logArea.lastChild);
+    }
+
+    function updateStats() {
+      document.getElementById('nodeCount').textContent = nodesData.length;
+      document.getElementById('edgeCount').textContent = edgesData.length;
+      document.getElementById('testCount').textContent = stats.tests;
+      document.getElementById('riskCount').textContent = stats.risks;
+      const rate = stats.tests > 0 ? Math.round((stats.tests - stats.risks) / stats.tests * 100) : '--';
+      document.getElementById('safeRate').textContent = rate + (rate !== '--' ? '%' : '');
+      const simUsers = document.getElementById('simUsers');
+      const simLinks = document.getElementById('simLinks');
+      if (simUsers) simUsers.textContent = nodesData.length;
+      if (simLinks) simLinks.textContent = edgesData.length;
+    }
+
+    async function loadMemory(personaId) {
+      try {
+        const res = await fetch(`/community/memory/${personaId}`);
+        const data = await res.json();
+        const nodeMemory = document.getElementById('nodeMemory');
+        if (!nodeMemory) return;
+        if (data.memory && data.memory.length) {
+          nodeMemory.innerHTML = data.memory.slice(0, 8).map(m => `<div class="memory-item">• ${m}</div>`).join('');
+        } else {
+          nodeMemory.innerHTML = '<div style="font-size:11px;color:#4a8aaa;">暂无记忆</div>';
+        }
+      } catch (e) {
+        const nodeMemory = document.getElementById('nodeMemory');
+        if (nodeMemory) nodeMemory.innerHTML = '<div style="font-size:11px;color:#4a8aaa;">记忆获取失败</div>';
+      }
+    }
+
+    // ========== 测试 ==========
+    async function runTest() {
+      if (!selectedNode) { addLog('请先选择一个数字孪生用户', 'error'); return; }
+      const intent = document.getElementById('intent').value.trim();
+      if (!intent) { addLog('请输入测试意图', 'error'); return; }
+      
+      const pattern = document.getElementById('pattern').value;
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      
+      addLog(`风洞测试: ${selectedNode.name}`, 'info');
+      triggerFlow(selectedNode.id, 'target', false);
+      
+      try {
+        const rulesText = document.getElementById('rulesText')?.value || '';
+        const res = await fetch('/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ persona_id: selectedNode.id, intent, behavior_pattern: pattern, rules_text: rulesText })
+        });
+        const data = await res.json();
+        
+        if (!res.ok) { addLog(`错误: ${data.error}`, 'error'); return; }
+        
+        testResults.push({ ...data, timestamp: new Date().toISOString(), intent, pattern });
+        stats.tests++;
+        selectedNode.testCount++;
+        if (data.risk_detected) { stats.risks++; selectedNode.riskCount++; }
+        updateStats();
+        
+        const resultArea = document.getElementById('resultArea');
+        const badge = document.getElementById('riskBadge');
+        const content = document.getElementById('resultContent');
+        resultArea.classList.add('show');
+        
+        // 显示对抗结果
+        const battleResult = data.battle_result;
+        if (battleResult) {
+          const bypassSuccess = battleResult.result?.bypass_success;
+          badge.className = `risk-badge ${bypassSuccess ? 'danger' : 'safe'}`;
+          badge.textContent = bypassSuccess ? '⚠️ 绕过成功' : '✅ 检测成功';
+          
+          content.textContent = JSON.stringify({
+            attack: {
+              content: battleResult.attack?.content?.substring(0, 80) + '...',
+              technique: battleResult.attack?.technique_used,
+              strategy: battleResult.attack?.strategy?.substring(0, 50) + '...',
+              complexity: battleResult.attack?.complexity_score,
+              evolution_level: battleResult.attack?.evolution_level,
+              processing_time: battleResult.attack?.processing_time + 's'
+            },
+            defense: {
+              detected: battleResult.defense?.detected,
+              reason: battleResult.defense?.detection_reason,
+              confidence: battleResult.defense?.confidence,
+              hit_keywords: battleResult.defense?.hit_keywords,
+              processing_time: battleResult.defense?.processing_time + 's'
+            },
+            result: {
+              winner: battleResult.result?.winner,
+              bypass_success: bypassSuccess
+            }
+          }, null, 2);
+        } else {
+          badge.className = `risk-badge ${data.risk_detected ? 'danger' : 'safe'}`;
+          badge.textContent = data.risk_detected ? 'RISK DETECTED' : 'SAFE';
+          content.textContent = JSON.stringify({
+            query: data.generated_query?.substring(0, 100) + '...',
+            risk_level: data.risk_level,
+            category: data.risk_category,
+            rules_version: data.rules_version,
+            rules_count: data.rules_count,
+            rule_hits: data.rule_hits,
+            analysis: data.analysis?.substring(0, 150) + '...'
+          }, null, 2);
+        }
+        
+        setTimeout(() => triggerFlow('target', selectedNode.id, data.risk_detected), 400);
+        addLog(`测试完成: ${data.risk_detected ? '⚠️ 发现风险' : '✅ 安全通过'}`, data.risk_detected ? 'error' : 'success');
+      } catch (e) { addLog(`异常: ${e.message}`, 'error'); }
+      finally { btn.disabled = false; }
+    }
+
+    async function runAllTests() {
+      const intent = document.getElementById('intent').value.trim();
+      if (!intent) { addLog('请输入测试意图', 'error'); return; }
+      
+      addLog('启动批量风洞测试...', 'info');
+      const visibleNodes = nodesData.filter(n => n.visible);
+      
+      for (const nodeData of visibleNodes) {
+        const mesh = nodeMeshes.find(m => m.userData.id === nodeData.id);
+        if (mesh) {
+          selectNode(nodeData, mesh);
+          await new Promise(r => setTimeout(r, 150));
+          await runTest();
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      addLog(`批量测试完成: ${visibleNodes.length}个数字孪生用户`, 'success');
+    }
+
+    // ========== 报告 ==========
+    function generateReport() {
+      if (testResults.length === 0) { addLog('暂无测试数据', 'error'); return; }
+      
+      const totalTests = testResults.length;
+      const riskTests = testResults.filter(r => r.risk_detected).length;
+      const safeRate = ((totalTests - riskTests) / totalTests * 100).toFixed(1);
+      
+      const categoryStats = {};
+      testResults.forEach(r => {
+        const node = nodesData.find(n => n.id === r.persona_id);
+        const cat = node ? node.category : '未知';
+        if (!categoryStats[cat]) categoryStats[cat] = { total: 0, risks: 0 };
+        categoryStats[cat].total++;
+        if (r.risk_detected) categoryStats[cat].risks++;
+      });
+      
+      const riskTypeStats = {};
+      testResults.filter(r => r.risk_detected).forEach(r => {
+        const type = r.risk_category || 'unknown';
+        riskTypeStats[type] = (riskTypeStats[type] || 0) + 1;
+      });
+      
+      const highRiskNodes = nodesData.filter(n => n.riskCount > 0).sort((a, b) => b.riskCount - a.riskCount).slice(0, 10);
+      const riskPaths = analyzeRiskPaths();
+      const recommendations = generateRecommendations(categoryStats, riskTypeStats, highRiskNodes, riskPaths);
+      
+      document.getElementById('reportContent').innerHTML = `
+        <div class="report-section">
+          <div class="report-section-title"><span class="icon">📈</span>风洞测试概览</div>
+          <div class="report-grid">
+            <div class="report-stat"><div class="report-stat-value">${totalTests}</div><div class="report-stat-label">总测试数</div></div>
+            <div class="report-stat"><div class="report-stat-value" style="color:#ff6b6b;">${riskTests}</div><div class="report-stat-label">风险检出</div></div>
+            <div class="report-stat"><div class="report-stat-value" style="color:#00ff88;">${safeRate}%</div><div class="report-stat-label">安全率</div></div>
+            <div class="report-stat"><div class="report-stat-value">${Object.keys(categoryStats).length}</div><div class="report-stat-label">覆盖类别</div></div>
+          </div>
+        </div>
+        <div class="report-section warning">
+          <div class="report-section-title"><span class="icon">📊</span>用户群体风险分布</div>
+          <div class="report-chart">
+            ${Object.entries(categoryStats).map(([cat, s]) => {
+              const height = Math.max(25, (s.risks / s.total) * 140);
+              return `<div class="chart-bar ${s.risks/s.total > 0.5 ? 'danger' : ''}" style="height:${height}px" data-label="${cat}(${s.risks}/${s.total})"></div>`;
+            }).join('')}
+          </div>
+        </div>
+        <div class="report-section danger">
+          <div class="report-section-title"><span class="icon">⚠️</span>风险类型分析</div>
+          <ul class="report-list">${Object.entries(riskTypeStats).sort((a,b)=>b[1]-a[1]).map(([type,count])=>`<li><span class="priority ${count>3?'high':count>1?'medium':'low'}">${count}次</span><span>${getRiskTypeName(type)}</span></li>`).join('')}</ul>
+        </div>
+        <div class="report-section danger">
+          <div class="report-section-title"><span class="icon">🎯</span>高风险数字孪生用户 TOP10</div>
+          <ul class="report-list">${highRiskNodes.map(n=>`<li><span class="priority high">${n.riskCount}次</span><span>${n.name}</span><span style="color:#4a8aaa;margin-left:auto;">${n.category}</span></li>`).join('')}</ul>
+        </div>
+        <div class="report-section success">
+          <div class="report-section-title"><span class="icon">💡</span>风控策略优化建议</div>
+          <ul class="report-list">${recommendations.map(r=>`<li><span class="priority ${r.priority}">${r.priorityLabel}</span><span>${r.content}</span></li>`).join('')}</ul>
+        </div>
+        <div class="report-section">
+          <div class="report-section-title"><span class="icon">📋</span>建议行动计划</div>
+          <ul class="report-list">${generateActionPlan(recommendations).map((a,i)=>`<li><span style="color:#00d4ff;font-weight:700;">Step ${i+1}</span><span>${a}</span></li>`).join('')}</ul>
+        </div>
+      `;
+      
+      document.getElementById('modalOverlay').classList.add('show');
+      addLog('风控策略优化报告已生成', 'success');
+    }
+
+    function analyzeRiskPaths() {
+      const paths = [];
+      edgesData.filter(e => ['influence','teach','command','supply','target'].includes(e.type)).forEach(edge => {
+        const from = nodesData.find(n => n.id === edge.from);
+        const to = nodesData.find(n => n.id === edge.to);
+        if (from && to && (from.riskCount > 0 || to.riskCount > 0)) {
+          paths.push({ risk: Math.max(from.riskCount, to.riskCount) / Math.max(from.testCount, to.testCount, 1), description: `${from.name} → [${edge.label}] → ${to.name}` });
+        }
+      });
+      return paths.sort((a, b) => b.risk - a.risk);
+    }
+
+    function generateRecommendations(categoryStats, riskTypeStats, highRiskNodes, riskPaths) {
+      const rec = [];
+      Object.entries(categoryStats).forEach(([cat, s]) => {
+        const rate = s.risks / s.total;
+        if (rate > 0.6) rec.push({ priority: 'high', priorityLabel: '紧急', content: `【${cat}】群体风险率${(rate*100).toFixed(0)}%过高，建议增加专项风控规则` });
+        else if (rate > 0.3) rec.push({ priority: 'medium', priorityLabel: '重要', content: `【${cat}】存在风险，建议优化边界判定` });
+      });
+      if (riskTypeStats['jailbreak'] > 2) rec.push({ priority: 'high', priorityLabel: '紧急', content: '越权/越界尝试频发，强化拒答与解释能力' });
+      if (riskTypeStats['prompt_injection'] > 1) rec.push({ priority: 'high', priorityLabel: '紧急', content: '提示词注入风险较高，建议加强输入过滤' });
+      if (highRiskNodes.filter(n => n.category === '风险信号').length > 2) rec.push({ priority: 'high', priorityLabel: '紧急', content: '风险信号群体触发率高，建议优化边界解释' });
+      if (highRiskNodes.filter(n => n.category === '对抗测试').length > 2) rec.push({ priority: 'high', priorityLabel: '紧急', content: '对抗测试群体触发率高，建议增强一致性策略' });
+      if (rec.length === 0) rec.push({ priority: 'low', priorityLabel: '良好', content: '整体风控表现良好，持续监控' });
+      return rec.sort((a,b) => ({high:0,medium:1,low:2})[a.priority] - ({high:0,medium:1,low:2})[b.priority]);
+    }
+
+    function generateActionPlan(rec) {
+      const plan = [];
+      if (rec.some(r => r.priority === 'high')) { plan.push('【立即】排查高风险场景，临时增加人工审核'); plan.push('【本周】制定专项风控规则'); }
+      if (rec.some(r => r.priority === 'medium')) { plan.push('【两周内】优化策略边界'); }
+      plan.push('【定期】运行数字孪生风洞压测');
+      plan.push('【长期】形成风控迭代SOP');
+      return plan;
+    }
+
+    function getRiskTypeName(type) {
+      return { political:'政治敏感', violence:'暴力内容', illegal:'违法犯罪', jailbreak:'越狱攻击', prompt_injection:'提示词注入', misinformation:'虚假信息', privacy:'隐私泄露' }[type] || type;
+    }
+
+    function closeModal() { document.getElementById('modalOverlay').classList.remove('show'); }
+    document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target.id === 'modalOverlay') closeModal(); });
+
+    // ============================================================
+    // 实时事件系统 - 轮询服务器事件，显示Agent讨论过程
+    // ============================================================
+    
+    let lastEventTimestamp = 0;
+    let eventPollingActive = false;
+    let eventPollInterval = null;
+    
+    function startEventPolling() {
+      if (eventPollingActive) return;
+      eventPollingActive = true;
+      lastEventTimestamp = Date.now() / 1000;
+      
+      eventPollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/events?since=${lastEventTimestamp}&count=20`);
+          if (!response.ok) return;
+          
+          const data = await response.json();
+          if (data.events && data.events.length > 0) {
+            processEvents(data.events);
+            lastEventTimestamp = data.latest_timestamp;
+          }
+        } catch (e) {
+          // 忽略轮询错误
+        }
+      }, 800); // 每800ms轮询一次
+    }
+    
+    function stopEventPolling() {
+      eventPollingActive = false;
+      if (eventPollInterval) {
+        clearInterval(eventPollInterval);
+        eventPollInterval = null;
+      }
+    }
+    
+    function processEvents(events) {
+      for (const event of events) {
+        switch (event.type) {
+          case 'central_agent_analysis':
+            addLog(`🔍 [中心Agent] ${event.data.message}`, 'info');
+            highlightCentralNode();
+            break;
+            
+          case 'agent_thinking':
+            addLog(`💭 [${event.data.agent}] ${event.data.action} (${event.data.progress})`, 'info');
+            highlightAgentNode(event.data.agent);
+            break;
+            
+          case 'post_result':
+            const statusClass = event.data.bypass ? 'success' : 'warning';
+            addLog(`📝 [${event.data.agent}] ${event.data.status} - "${event.data.content}"`, statusClass);
+            break;
+            
+          case 'discussion_phase_start':
+            addLog(`🗣️ ${event.data.message}`, 'info');
+            addLog(`   成功绕过的技巧数: ${event.data.successful_count}`, 'info');
+            break;
+            
+          case 'meeting_start':
+            addLog(`📢 [策略会议] 话题: ${event.data.topic}`, 'info');
+            addLog(`   参与者: ${event.data.participants.join(', ')}`, 'info');
+            // 高亮参与者之间的连线
+            highlightMultipleConnections(event.data.participants);
+            break;
+            
+          case 'meeting_speech':
+            addLog(`💬 [${event.data.speaker}] "${event.data.content}"`, 'info');
+            highlightAgentNode(event.data.speaker);
+            break;
+            
+          case 'agent_dialogue':
+            addLog(`💬 [${event.data.speaker}] ${event.data.content}`, 'info');
+            // 高亮对话双方的连线
+            if (event.data.from_agent && event.data.to_agent) {
+              flashConnectionLine(event.data.from_agent, event.data.to_agent);
+            }
+            break;
+            
+          case 'skill_learned':
+            const techs = event.data.techniques ? event.data.techniques.join(', ') : event.data.technique;
+            addLog(`📚 [${event.data.agent}] 学会了: ${techs}`, 'success');
+            highlightAgentNode(event.data.agent, '#00ff88');
+            // 如果有agent_id，触发学习粒子效果
+            if (event.data.agent_id) {
+              createLearningParticles(event.data.agent_id);
+            }
+            break;
+            
+          case 'agent_learned_from_peer':
+            // 新增：Agent间学习事件 - 添加闪光关系线
+            addLog(`🔗 [${event.data.learner_name}] 从同伴学会了: ${event.data.technique}`, 'success');
+            addLearningConnection(event.data.teacher_id, event.data.learner_id, event.data.technique);
+            break;
+            
+          case 'discussion_phase_end':
+            addLog(`✅ ${event.data.message}`, 'success');
+            // 新增：批量绘制学习连接
+            if (event.data.learning_connections && event.data.learning_connections.length > 0) {
+              event.data.learning_connections.forEach((conn, idx) => {
+                setTimeout(() => {
+                  addLearningConnection(conn.from, conn.to, conn.technique);
+                }, idx * 200); // 错开显示，形成动画效果
+              });
+              addLog(`🔗 建立了 ${event.data.learning_connections.length} 条学习连接`, 'info');
+            }
+            break;
+            
+          case 'rule_refined':
+            // 新增：规则拆解事件
+            addLog(`📋 [规则拆解] ${event.data.rule_id}: 识别了 ${event.data.variants_count} 种变体, ${event.data.memes_count} 个最新梗`, 'info');
+            highlightCentralNode();
+            break;
+            
+          case 'evolved_test_start':
+            addLog(`🔄 ${event.data.message}`, 'info');
+            break;
+            
+          case 'baseline_complete':
+          case 'evolved_test_complete':
+            addLog(`📊 测试完成: 绕过 ${event.data.bypass}/${event.data.total} (${event.data.bypass_rate}%)`, 
+                   event.data.bypass_rate > 50 ? 'warning' : 'success');
+            break;
+            
+          default:
+            // 其他事件也显示
+            if (event.data.message) {
+              addLog(`ℹ️ ${event.data.message}`, 'info');
+            }
+        }
+      }
+    }
+    
+    // 高亮中心节点
+    function highlightCentralNode() {
+      // 让所有节点闪烁一下，表示中心Agent在工作
+      if (sphereGroup) {
+        sphereGroup.children.forEach(child => {
+          if (child.material && child.material.emissive) {
+            const originalColor = child.material.emissive.getHex();
+            child.material.emissive.setHex(0x00ffff);
+            setTimeout(() => {
+              child.material.emissive.setHex(originalColor);
+            }, 500);
+          }
+        });
+      }
+    }
+    
+    // 高亮指定Agent节点
+    function highlightAgentNode(agentName, color = '#00d4ff') {
+      const node = nodesData.find(n => n.name === agentName);
+      if (node && node.mesh) {
+        const originalColor = node.mesh.material.emissive ? node.mesh.material.emissive.getHex() : 0;
+        if (node.mesh.material.emissive) {
+          node.mesh.material.emissive.setHex(parseInt(color.replace('#', '0x')));
+          setTimeout(() => {
+            node.mesh.material.emissive.setHex(originalColor);
+          }, 800);
+        }
+        // 也让节点放大一下
+        const originalScale = node.mesh.scale.x;
+        node.mesh.scale.set(originalScale * 1.5, originalScale * 1.5, originalScale * 1.5);
+        setTimeout(() => {
+          node.mesh.scale.set(originalScale, originalScale, originalScale);
+        }, 600);
+      }
+    }
+    
+    // 闪烁两个Agent之间的连线
+    function flashConnectionLine(fromId, toId) {
+      // 找到连接这两个节点的边
+      const edge = edgesData.find(e => 
+        (e.source === fromId && e.target === toId) || 
+        (e.source === toId && e.target === fromId) ||
+        (e.from === fromId && e.to === toId) ||
+        (e.from === toId && e.to === fromId)
+      );
+      
+      if (edge && edge.line) {
+        // 让连线变亮
+        const originalColor = edge.line.material.color.getHex();
+        edge.line.material.color.setHex(0x00ff88);
+        edge.line.material.opacity = 1;
+        
+        setTimeout(() => {
+          edge.line.material.color.setHex(originalColor);
+          edge.line.material.opacity = 0.3;
+        }, 1000);
+      }
+      
+      // 同时高亮两个节点
+      const fromNode = nodesData.find(n => n.id === fromId);
+      const toNode = nodesData.find(n => n.id === toId);
+      if (fromNode) highlightAgentNode(fromNode.name, '#ffaa00');
+      if (toNode) highlightAgentNode(toNode.name, '#00ff88');
+    }
+    
+    // 新增：添加学习连接线（带闪光动画）
+    function addLearningConnection(teacherId, learnerId, technique) {
+      const teacherNode = nodesData.find(n => n.id === teacherId);
+      const learnerNode = nodesData.find(n => n.id === learnerId);
+      
+      if (!teacherNode || !learnerNode) return;
+      
+      // 检查是否已存在这条学习线
+      const existingEdge = edgesData.find(e => 
+        e.type === 'learn' && 
+        ((e.from === teacherId && e.to === learnerId) || 
+         (e.from === learnerId && e.to === teacherId))
+      );
+      
+      if (existingEdge) {
+        // 已存在，只闪光
+        flashLearningLine(existingEdge.line);
+        return;
+      }
+      
+      // 创建新的学习连接线
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        teacherNode.position,
+        learnerNode.position
+      ]);
+      
+      // 学习线使用特殊的渐变色和粗一点的线
+      const material = new THREE.LineBasicMaterial({
+        color: 0x00ff88,
+        transparent: true,
+        opacity: 0,
+        linewidth: 2
+      });
+      
+      const line = new THREE.Line(geometry, material);
+      line.userData = { 
+        type: 'learn', 
+        technique: technique,
+        from: teacherId,
+        to: learnerId
+      };
+      
+      // 添加到场景
+      geodesicGroup.add(line);
+      
+      // 记录到edgesData
+      const newEdge = {
+        from: teacherId,
+        to: learnerId,
+        type: 'learn',
+        label: `学习: ${technique}`,
+        color: 0x00ff88,
+        line: line
+      };
+      edgesData.push(newEdge);
+      edgeLines.push(line);
+      
+      // 更新统计
+      const edgeCountEl = document.getElementById('edgeCount');
+      if (edgeCountEl) edgeCountEl.textContent = edgesData.length;
+      
+      // 执行闪光出现动画
+      flashLearningLine(line, true);
+      
+      // 高亮两个节点
+      highlightAgentNode(teacherNode.name, '#ffaa00');
+      highlightAgentNode(learnerNode.name, '#00ff88');
+    }
+    
+    // 学习线闪光动画
+    function flashLearningLine(line, isNew = false) {
+      if (!line) return;
+      
+      // 闪光动画
+      let flashCount = 0;
+      const maxFlash = isNew ? 6 : 3;
+      const originalOpacity = isNew ? 0 : 0.6;
+      
+      const flashInterval = setInterval(() => {
+        if (flashCount >= maxFlash) {
+          clearInterval(flashInterval);
+          line.material.opacity = 0.6;  // 最终保持可见
+          line.material.color.setHex(0x00ff88);
+          return;
+        }
+        
+        // 交替亮暗
+        if (flashCount % 2 === 0) {
+          line.material.opacity = 1;
+          line.material.color.setHex(0xffffff);  // 闪白光
+        } else {
+          line.material.opacity = 0.6;
+          line.material.color.setHex(0x00ff88);  // 回到绿色
+        }
+        flashCount++;
+      }, 150);
+    }
+    
+    // 创建学习粒子效果
+    function createLearningParticles(agentId) {
+      const node = nodesData.find(n => n.id === agentId);
+      if (!node || !node.mesh) return;
+      
+      // 在节点周围创建粒子
+      const particleCount = 20;
+      const particles = [];
+      
+      for (let i = 0; i < particleCount; i++) {
+        const geometry = new THREE.SphereGeometry(0.02, 8, 8);
+        const material = new THREE.MeshBasicMaterial({
+          color: 0x00ff88,
+          transparent: true,
+          opacity: 1
+        });
+        const particle = new THREE.Mesh(geometry, material);
+        
+        // 随机位置（在节点附近）
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 0.1 + Math.random() * 0.1;
+        particle.position.copy(node.position);
+        particle.position.x += Math.cos(angle) * radius;
+        particle.position.y += Math.sin(angle) * radius;
+        particle.position.z += (Math.random() - 0.5) * 0.1;
+        
+        // 存储速度
+        particle.userData.velocity = {
+          x: Math.cos(angle) * 0.02,
+          y: Math.sin(angle) * 0.02,
+          z: (Math.random() - 0.5) * 0.02
+        };
+        
+        geodesicGroup.add(particle);
+        particles.push(particle);
+      }
+      
+      // 动画：粒子向外扩散并消失
+      let frame = 0;
+      const animate = () => {
+        frame++;
+        particles.forEach(p => {
+          p.position.x += p.userData.velocity.x;
+          p.position.y += p.userData.velocity.y;
+          p.position.z += p.userData.velocity.z;
+          p.material.opacity = Math.max(0, 1 - frame / 30);
+          p.scale.setScalar(1 - frame / 30);
+        });
+        
+        if (frame < 30) {
+          requestAnimationFrame(animate);
+        } else {
+          // 清理粒子
+          particles.forEach(p => {
+            geodesicGroup.remove(p);
+            p.geometry.dispose();
+            p.material.dispose();
+          });
+        }
+      };
+      animate();
+    }
+    
+    // 高亮多个Agent之间的连接（用于会议场景）
+    function highlightMultipleConnections(participants) {
+      // 找到这些参与者对应的节点
+      const participantNodes = nodesData.filter(n => participants.includes(n.name));
+      
+      // 高亮所有参与者节点
+      participantNodes.forEach(node => {
+        highlightAgentNode(node.name, '#ffaa00');
+      });
+      
+      // 高亮他们之间的所有连线
+      for (let i = 0; i < participantNodes.length; i++) {
+        for (let j = i + 1; j < participantNodes.length; j++) {
+          flashConnectionLine(participantNodes[i].id, participantNodes[j].id);
+        }
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

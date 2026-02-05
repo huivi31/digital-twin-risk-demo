@@ -1,0 +1,4 @@
+# 数字孪生风控风洞系统 - 依赖
+flask>=2.3.0
+google-generativeai>=0.8.0
+gunicorn>=21.0.0
