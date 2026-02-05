@@ -4243,7 +4243,39 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
       }
     }
 
-    init();
+    // 确保 DOM 和 Three.js 都加载完成后再初始化
+    function safeInit() {
+      if (typeof THREE === 'undefined') {
+        console.error('❌ Three.js 未加载');
+        setTimeout(safeInit, 100);
+        return;
+      }
+      
+      const container = document.getElementById('container');
+      if (!container) {
+        console.error('❌ container 元素未找到');
+        return;
+      }
+      
+      try {
+        init();
+        console.log('✅ 3D场景初始化成功');
+      } catch (e) {
+        console.error('❌ 3D场景初始化失败:', e);
+        container.innerHTML = `<div style="color:#ff5555;padding:50px;text-align:center;">
+          <h2>3D场景加载失败</h2>
+          <p>错误: ${e.message}</p>
+          <p>请刷新页面重试</p>
+        </div>`;
+      }
+    }
+    
+    // DOM 加载完成后初始化
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', safeInit);
+    } else {
+      safeInit();
+    }
   </script>
 </body>
 </html>
