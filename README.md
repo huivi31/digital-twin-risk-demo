@@ -1,151 +1,87 @@
-# 🌐 数字孪生风控风洞系统
+# 🛡️ Digital Twin Risk System (3D Next-Gen)
 
-> Digital Twin Risk Wind Tunnel - 3D可视化风险测试平台
+> **A Multi-Agent Adversarial Simulation System for Content Safety**
 
-![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
-![Flask](https://img.shields.io/badge/Flask-2.3+-green.svg)
-![Three.js](https://img.shields.io/badge/Three.js-3D-orange.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+This project implements a digital twin environment where AI agents act as "attackers" (simulating real-world users trying to bypass censorship) and a "central inspector" (the content safety system) to test and improve moderation rules.
 
-## 🎯 项目简介
+## 🌟 Key Features
 
-数字孪生风控风洞系统是一个创新的**内容安全规则测试平台**，通过构建26个具有不同攻击特征的数字孪生用户（Agent），模拟真实的对抗场景，帮助风控团队：
+### 1. 🧠 Autonomous Attack Agents
 
-- 🔍 **测试规则鲁棒性** - 在上线前发现规则漏洞
-- 📊 **量化规则衰减** - 对比基线测试与演化后测试的检出率变化
-- 🎭 **模拟真实攻击** - 26种不同人设的攻击者，覆盖各类绕过技巧
-- 🧠 **AI驱动生成** - 使用 Gemini 2.0 Flash 生成真实的攻击内容
+- **Persona-Driven**: 26 distinct user personas (e.g., "Keyboard Warrior", "Reviewer", "Troll") with unique behaviors.
+- **Adaptive Strategy**: Agents learn from failures, escalating their strategies from simple keyword evasion to complex semantic attacks.
+- **Knowledge Sharing**: Agents share successful bypass techniques with each other through simulated "discussions" and "strategy meetings".
+- **Techniques**: Supports various evasion methods:
+  - Homophones & Pinyin (e.g., "zf" for Government)
+  - Emoji & Symbols
+  - Historical Allusions
+  - Multilingual Mixing
+  - Semantic Sarcasm
 
-## ✨ 核心特性
+### 2. 🛡️ Multi-Layer Defense System
 
-### 🌍 3D 可视化
-- 基于 Three.js 的沉浸式 3D 球体界面
-- 实时展示 Agent 之间的社交关系网络
-- 攻击/学习时的动态连线闪光效果
+A robust, deterministic rule engine that operates in 5 layers:
 
-### 🤖 Multi-Agent 架构
-```
-┌─────────────────────────────────────────────────┐
-│                  中心质检 Agent                   │
-│         (规则拆解 + 7维度深度分析)                │
-└─────────────────────────────────────────────────┘
-                        ▲
-                        │ 检测
-                        ▼
-┌─────────────────────────────────────────────────┐
-│              26个外围攻击 Agent                   │
-│  谐音大师 | 拼音玩家 | emoji达人 | 隐喻专家 ...   │
-│         (互相学习 + 迭代进化攻击)                 │
-└─────────────────────────────────────────────────┘
-```
+1. **Keyword Matching**: Exact match against sensitive words.
+2. **Pinyin Analysis**: Detects pinyin abbreviations and homophones.
+3. **Regex Patterns**: Identifies complex sentence structures and combinations.
+4. **Custom Variants**: Learns from user feedback and new slang.
+5. **Semantic Analysis (LLM)**: Fallback to LLM for subtle contextual violations (e.g., sarcasm, metaphor).
 
-### 📋 规则深度拆解（7维度）
-| 维度 | 说明 |
-|------|------|
-| 违规定义 | 核心行为、意图标准、严重程度分级 |
-| 边界案例 | 学术讨论、新闻报道的豁免条件 |
-| 文字变形 | 谐音、拼音、空格分隔、形近字、emoji |
-| 语义隐喻 | 历史典故、文学引用、代号指代、反讽 |
-| 最新梗库 | 2024-2025网络流行的隐蔽表达 |
-| 多语言 | 中英混杂、繁简转换、方言 |
-| 检测策略 | 关键特征、上下文线索、误判风险 |
+### 3. 🔄 Adversarial Evolution Loop
 
-### 🎭 26类攻击人设
-覆盖 6 大攻击类别：
-- **文字变形类**: 谐音替代、拼音缩写、emoji替代、空格插入...
-- **隐喻暗示类**: 历史影射、文学隐喻、动物代称、反讽表达...
-- **技术绕过类**: 提示词注入、上下文污染、角色扮演...
-- **多语言类**: 英文直译、混合语言、方言表达...
-- **社工攻击类**: 情感操控、权威冒充、紧急诱导...
-- **协作攻击类**: 多账号配合、话题引导、信息拼接...
+- **Round 1 (Baseline)**: Agents attack based on their initial knowledge.
+- **Learning Phase**: Agents discuss successful bypasses and learn new techniques from peers.
+- **Round 2 (Evolved)**: Agents attack again with upgraded strategies.
+- **Analysis**: System calculates "Rule Degradation Rate" to measure how quickly a rule becomes obsolete.
 
-## 🚀 快速开始
+### 4. 🧠 Knowledge Feed System
 
-### 本地运行
+- Users can "feed" the agents with real-world data:
+  - **Attack Materials**: Text samples of real violations.
+  - **Slang Dictionary**: New internet slang definitions.
+  - **Bypass Cases**: Examples of successful evasion.
+- Agents digest this knowledge to craft more realistic attacks.
+
+## 🚀 Architecture
+
+- **`agents.py`**: Defines `AttackAgent`, `CentralInspectorAgent`, and system state.
+- **`battle.py`**: Implements the adversarial loop, agent discussions, and strategy meetings.
+- **`rule_engine.py`**: The deterministic 5-layer content inspection engine.
+- **`attack_knowledge.py`**: Manages the knowledge base, few-shot examples, and strategy escalation.
+- **`web_app.py`**: Flask server providing APIs for the frontend.
+- **`templates/index.html`**: 3D Visualization frontend (Three.js + React-like UI).
+
+## 🛠️ Usage
+
+### Prerequisites
+
+- Python 3.8+
+- API Key (Gemini or OpenAI)
+
+### Installation
+
 ```bash
-# 克隆仓库
-git clone https://github.com/huivi31/digital-twin-risk-demo.git
-cd digital-twin-risk-demo
-
-# 安装依赖
 pip install -r requirements.txt
+```
 
-# 启动服务
+### Running the Server
+
+```bash
 python web_app.py
-
-# 访问 http://localhost:8000
 ```
 
-### 在线体验
-部署在 Render：[https://digital-twin-risk-demo.onrender.com](https://digital-twin-risk-demo.onrender.com)
+Access the dashboard at `http://localhost:8000`
 
-## 📖 使用指南
+## 📊 Workflow
 
-### 对抗测试流程
+1. **Rule Setup**: Define your content moderation rules in the UI.
+2. **Knowledge Feed (Optional)**: Feed the agents with latest internet slang or attack examples.
+3. **Baseline Test**: Run a test against all 26 agents.
+4. **Evolution**: Watch agents discuss and learn from each other.
+5. **Adversarial Test**: See if the agents can now bypass your rules with their new knowledge.
+6. **Analysis**: Review the report to see which rules failed and which techniques are most effective.
 
-```
-STEP 1: 设定测试主题        STEP 2: 配置审核规则        STEP 3: 启动测试
-┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
-│  输入敏感话题      │  →   │  输入审核规则      │  →   │  选择测试模式      │
-│  (外围Agent可见)   │      │  (仅中心Agent可见) │      │  运行对抗测试      │
-└──────────────────┘      └──────────────────┘      └──────────────────┘
-```
+## 🤝 Contribution
 
-### 四种测试模式
-| 模式 | 说明 | 适用场景 |
-|------|------|----------|
-| 🎯 单Agent测试 | 选中一个Agent单独测试 | 定向分析某类攻击 |
-| 👥 全员对抗 | 26个Agent同时攻击 | 全面压测规则 |
-| 🔄 迭代学习 | Agent从失败中学习后再测 | 测试规则抗演化能力 |
-| 🤝 协作攻击 | 多Agent配合攻击 | 测试组合攻击防御 |
-
-## 📊 输出报告
-
-系统生成详细的测试报告，包括：
-- 基线检出率 vs 演化后检出率
-- 规则鲁棒性评分
-- 各类攻击技巧的绕过成功率
-- 优化建议与行动计划
-- 可导出的攻击帖子样本
-
-## 🛠️ 技术栈
-
-- **后端**: Python 3.11 + Flask
-- **AI**: Google Gemini 2.0 Flash API
-- **前端**: Three.js + 原生 JavaScript
-- **部署**: Gunicorn + Render
-
-## 📁 项目结构
-
-```
-digital-twin-risk-demo/
-├── web_app.py              # Flask 主应用 + Agent 逻辑
-├── user_personas.py        # 26个攻击人设定义
-├── config.py               # API 配置
-├── templates/
-│   └── index.html          # 3D 可视化前端
-├── requirements.txt        # Python 依赖
-├── Procfile               # Render 部署配置
-└── render.yaml            # Render 服务配置
-```
-
-## 🔮 应用场景
-
-1. **规则上线前测试** - 新规则在灰度前进行风洞测试
-2. **规则迭代评估** - 对比不同版本规则的鲁棒性
-3. **攻防演练** - 安全团队红蓝对抗训练
-4. **风控培训** - 帮助运营人员理解攻击手法
-
-## 📝 License
-
-MIT License
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
----
-
-<p align="center">
-  <b>🛡️ 让风控规则在上线前经受考验</b>
-</p>
+This project is a demo for next-generation content safety testing. Feel free to contribute via PRs.
