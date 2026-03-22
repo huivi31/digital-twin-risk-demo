@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+_# -*- coding: utf-8 -*-
 """
 多智能体基准测试系统 - Web版服务
 核心架构：1个中心质检Agent + N个外围攻击Agent
@@ -9,15 +9,13 @@ import random
 import time
 
 from config import API_CONFIG
-from user_personas import BASE_PERSONAS as USER_PERSONAS
 from rule_engine import RULE_ENGINE
-from attack_knowledge import KNOWLEDGE_STORE
-
-# Import from new modules
 from agents import (
-    SYSTEM_STATE, PERSONA_INDEX, EVENT_BUS,
-    CentralInspectorAgent, AttackAgent, CENTRAL_INSPECTOR
+    SYSTEM_STATE, PERSONA_INDEX, EVENT_BUS, CENTRAL_AGENT, PERIPHERAL_AGENTS,
+    GENERATED_USER_PERSONAS, reset_system as reset_agents_system
 )
+from attack_knowledge_v2 import KNOWLEDGE_STORE
+
 from battle import (
     run_agent_discussion, run_group_strategy_meeting,
     run_adversarial_battle, run_iterative_optimization,
@@ -32,8 +30,8 @@ app = Flask(__name__)
 
 # 用户关系图
 USER_RELATIONS = []
-for i, p1 in enumerate(USER_PERSONAS):
-    for p2 in USER_PERSONAS[i+1:]:
+for i, p1 in enumerate(GENERATED_USER_PERSONAS):
+    for p2 in GENERATED_USER_PERSONAS[i+1:]:
         USER_RELATIONS.append({
             "source": p1["id"],
             "target": p2["id"],
@@ -42,9 +40,9 @@ for i, p1 in enumerate(USER_PERSONAS):
 
 # 社区配置
 COMMUNITY_CONFIG = {
-    "total_agents": len(USER_PERSONAS),
-    "categories": list(set(p.get("category", "其他") for p in USER_PERSONAS)),
-    "version": "v2.4.0"
+    "total_agents": len(GENERATED_USER_PERSONAS),
+    "categories": list(set(p.get("group", "其他") for p in GENERATED_USER_PERSONAS)),
+    "version": "v2.6.0"
 }
 
 # ============================================================================
@@ -55,9 +53,9 @@ COMMUNITY_CONFIG = {
 def index():
     return render_template(
         "index.html",
-        personas=USER_PERSONAS,
+        personas=GENERATED_USER_PERSONAS,
         relations=USER_RELATIONS,
-        provider=API_CONFIG.get("provider", "gemini"),
+        provider=API_CONFIG.get("provider", "openai"), # Use openai as default provider
         community_config=COMMUNITY_CONFIG
     )
 
@@ -88,10 +86,10 @@ def set_rules():
     RULE_ENGINE.set_rules(rules)
     
     # 中心Agent拆解规则（LLM增强，可选）
-    CENTRAL_INSPECTOR.refine_rules(rules)
+    CENTRAL_AGENT.refine_rules(rules)
     
     # 将LLM拆解出的变体也同步到规则引擎的自定义词库
-    for rule_id, standard in CENTRAL_INSPECTOR.refined_standards.items():
+    for rule_id, standard in CENTRAL_AGENT.refined_standards.items():
         refined = standard.get("refined", {})
         for variant_type in ["text_variants", "semantic_bypass"]:
             variants_dict = refined.get(variant_type, {})
@@ -108,7 +106,7 @@ def set_rules():
         "status": "ok",
         "rules_count": len(rules),
         "rules_version": SYSTEM_STATE["rules_version"],
-        "refined_standards": len(CENTRAL_INSPECTOR.refined_standards)
+        "refined_standards": len(CENTRAL_AGENT.refined_standards)
     })
 
 
@@ -119,7 +117,7 @@ def get_rules():
         "rules": SYSTEM_STATE["rules"],
         "rules_count": len(SYSTEM_STATE["rules"]),
         "rules_version": SYSTEM_STATE["rules_version"],
-        "refined_standards": CENTRAL_INSPECTOR.refined_standards,  # 包含详细拆解
+        "refined_standards": CENTRAL_AGENT.refined_standards,  # 包含详细拆解
     })
 
 
@@ -182,24 +180,17 @@ def get_battle_history():
 def get_inspector_stats():
     """获取中心Agent统计"""
     return jsonify({
-        "stats": CENTRAL_INSPECTOR.get_stats(),
-        "refined_standards_count": len(CENTRAL_INSPECTOR.refined_standards),
+        "stats": CENTRAL_AGENT.get_stats(),
+        "refined_standards_count": len(CENTRAL_AGENT.refined_standards),
     })
 
 
 @app.get("/agent/<persona_id>/state")
 def get_agent_state(persona_id: str):
     """获取外围Agent状态"""
-    persona = PERSONA_INDEX.get(persona_id)
-    if not persona:
+    agent = PERIPHERAL_AGENTS.get(persona_id)
+    if not agent:
         return jsonify({"error": "Agent不存在"}), 404
-    
-    agent = AttackAgent(persona)
-    agent_state = SYSTEM_STATE["peripheral_agents"].get(persona_id, {})
-    agent.learned_techniques = agent_state.get("learned_techniques", [])
-    agent.success_count = agent_state.get("success_count", 0)
-    agent.fail_count = agent_state.get("fail_count", 0)
-    agent.evolution_level = agent_state.get("evolution_level", 1)
     
     return jsonify(agent.get_state())
 
@@ -226,12 +217,6 @@ def update_agent_config(persona_id: str):
         if field in config:
             persona[field] = config[field]
     
-    # 同时更新USER_PERSONAS中的数据
-    for i, p in enumerate(USER_PERSONAS):
-        if p["id"] == persona_id:
-            USER_PERSONAS[i] = persona
-            break
-    
     return jsonify({
         "success": True,
         "message": f"Agent {persona.get('name', persona_id)} 配置已更新",
@@ -243,13 +228,7 @@ def update_agent_config(persona_id: str):
 def get_all_agent_states():
     """获取所有外围Agent状态"""
     states = []
-    for persona in USER_PERSONAS:
-        agent = AttackAgent(persona)
-        agent_state = SYSTEM_STATE["peripheral_agents"].get(persona["id"], {})
-        agent.learned_techniques = agent_state.get("learned_techniques", [])
-        agent.success_count = agent_state.get("success_count", 0)
-        agent.fail_count = agent_state.get("fail_count", 0)
-        agent.evolution_level = agent_state.get("evolution_level", 1)
+    for agent_id, agent in PERIPHERAL_AGENTS.items():
         states.append(agent.get_state())
     
     return jsonify({
@@ -308,707 +287,48 @@ def start_meeting():
 @app.post("/system/reset")
 def reset_system():
     """重置系统状态"""
-    # Reset system state in agents module
-    SYSTEM_STATE["central_agent"]["detection_rules"] = []
-    SYSTEM_STATE["central_agent"]["refined_standards"] = {}
-    SYSTEM_STATE["central_agent"]["detection_stats"] = {
-        "total_checked": 0,
-        "total_detected": 0,
-        "total_bypassed": 0,
-        "by_technique": {},
-        "by_keyword": {},
-    }
-    SYSTEM_STATE["peripheral_agents"] = {
-        p["id"]: {
-            "persona": p,
-            "learned_techniques": [],
-            "success_count": 0,
-            "fail_count": 0,
-            "evolution_level": 1,
-            "last_strategy": None,
-        } for p in USER_PERSONAS
-    }
-    SYSTEM_STATE["battle_history"] = []
-    SYSTEM_STATE["rules"] = []
-    SYSTEM_STATE["rules_version"] = 0
-    
-    CENTRAL_INSPECTOR.reset_stats()
-    CENTRAL_INSPECTOR.detection_rules = []
-    CENTRAL_INSPECTOR.refined_standards = {}
-    RULE_ENGINE.reset_stats()
+    reset_agents_system()
     RULE_ENGINE.set_rules([])
-    RULE_ENGINE.custom_variants = {}
-    KNOWLEDGE_STORE.clear()
-    
-    return jsonify({"status": "reset", "message": "系统已重置"})
+    return jsonify({"status": "ok", "message": "系统已重置"})
 
 
-@app.get("/health")
-def health():
-    return jsonify({"status": "ok"})
-
-
-# ============================================================================
-# 知识投喂 API
-# ============================================================================
-
-@app.post("/feed/materials")
-def feed_materials():
-    """投喂攻击材料"""
+@app.post("/agent/feed")
+def feed_agent():
+    """投喂资料给Agent"""
     data = request.json or {}
-    texts = data.get("texts", [])
-    category = data.get("category", "通用")
-    count = KNOWLEDGE_STORE.feed_materials(texts, category)
-    return jsonify({"status": "ok", "fed_count": count, "knowledge_version": KNOWLEDGE_STORE.version})
+    agent_ids = data.get("agent_ids", [])
+    attack_material = data.get("attack_material", "")
+    slang_dict = data.get("slang_dict", "")
+    bypass_cases = data.get("bypass_cases", "")
 
-@app.post("/feed/slang")
-def feed_slang():
-    """投喂行业黑话/暗语"""
-    data = request.json or {}
-    entries = data.get("entries", [])
-    count = KNOWLEDGE_STORE.feed_slang(entries)
-    return jsonify({"status": "ok", "fed_count": count, "knowledge_version": KNOWLEDGE_STORE.version})
+    if not any([attack_material, slang_dict, bypass_cases]):
+        return jsonify({"error": "投喂内容不能为空"}), 400
 
-@app.post("/feed/cases")
-def feed_cases():
-    """投喂绕过案例"""
-    data = request.json or {}
-    cases = data.get("cases", [])
-    count = KNOWLEDGE_STORE.feed_cases(cases)
-    return jsonify({"status": "ok", "fed_count": count, "knowledge_version": KNOWLEDGE_STORE.version})
+    # 如果没有指定agent_ids，则默认投喂给所有agent
+    if not agent_ids:
+        agent_ids = list(PERIPHERAL_AGENTS.keys())
 
-@app.get("/knowledge/status")
-def get_knowledge_status():
-    """获取知识库状态"""
-    return jsonify({
-        "materials_count": len(KNOWLEDGE_STORE.fed_materials),
-        "slang_count": len(KNOWLEDGE_STORE.fed_slang),
-        "cases_count": len(KNOWLEDGE_STORE.fed_cases),
-        "version": KNOWLEDGE_STORE.version
-    })
-
-
-# ============================================================================
-# 知识投喂 API
-# ============================================================================
-
-@app.post("/knowledge/feed")
-def feed_knowledge():
-    """投喂攻击资料给所有Agent学习"""
-    data = request.json or {}
-    feed_type = data.get("type", "materials")  # materials / slang / cases
-    content = data.get("content", "")
-    items = data.get("items", [])
-    
-    result = {"fed_count": 0, "type": feed_type}
-    
-    if feed_type == "materials":
-        # 文本资料：每行一条
-        if content:
-            texts = [line.strip() for line in content.splitlines() if line.strip()]
-        else:
-            texts = items
-        count = KNOWLEDGE_STORE.feed_materials(texts, data.get("category", "通用"))
-        result["fed_count"] = count
-    
-    elif feed_type == "slang":
-        # 行业黑话："词=含义" 格式，每行一条
-        if content:
-            entries = [line.strip() for line in content.splitlines() if line.strip()]
-        else:
-            entries = items
-        count = KNOWLEDGE_STORE.feed_slang(entries)
-        result["fed_count"] = count
-        
-        # 黑话同时加入规则引擎的自定义变体
-        for entry in entries:
-            if isinstance(entry, str) and ("=" in entry or "→" in entry):
-                sep = "=" if "=" in entry else "→"
-                parts = entry.split(sep, 1)
-                if len(parts) == 2:
-                    RULE_ENGINE.add_custom_variants(parts[1].strip(), [parts[0].strip()])
-    
-    elif feed_type == "cases":
-        # 绕过案例
-        if isinstance(items, list):
-            count = KNOWLEDGE_STORE.feed_cases(items)
-            result["fed_count"] = count
-    
-    # 发送事件
-    EVENT_BUS.emit("knowledge_fed", {
-        "type": feed_type,
-        "count": result["fed_count"],
-        "message": f"投喂了{result['fed_count']}条{feed_type}资料"
-    })
-    
-    result["knowledge_version"] = KNOWLEDGE_STORE.version
-    result["summary"] = KNOWLEDGE_STORE.get_summary()
-    return jsonify(result)
-
-
-@app.get("/knowledge/list")
-def list_knowledge():
-    """查看已投喂资料"""
-    return jsonify(KNOWLEDGE_STORE.get_summary())
-
-
-@app.post("/knowledge/clear")
-def clear_knowledge():
-    """清空投喂资料"""
-    KNOWLEDGE_STORE.clear()
-    return jsonify({"status": "cleared", "message": "投喂资料已清空"})
-
-
-@app.get("/rule-engine/stats")
-def get_rule_engine_stats():
-    """获取规则引擎统计（按层统计）"""
-    return jsonify(RULE_ENGINE.get_stats())
-
-
-# 兼容旧API（保持页面功能正常）
-@app.post("/simulate")
-def simulate():
-    """兼容旧API - 社区模拟"""
-    return jsonify({
-        "events": [],
-        "relations": USER_RELATIONS,
-        "message": "系统已重构为对抗模式"
-    })
-
-
-@app.post("/run")
-def run_test():
-    """兼容旧API - 单角色测试"""
-    data = request.json or {}
-    persona_id = data.get("persona_id", "")
-    
-    if not persona_id:
-        return jsonify({"error": "缺少persona_id"}), 400
-    
-    # 运行一次对抗
-    result = run_adversarial_battle(persona_id)
-    
-    return jsonify({
-        "persona_id": persona_id,
-        "generated_query": result["attack"]["content"],
-        "risk_level": 1 if result["result"]["bypass_success"] else 5,
-        "risk_detected": not result["result"]["bypass_success"],
-        "technique_used": result["attack"]["technique_used"],
-        "battle_result": result,
-    })
-
-
-@app.get("/community/memory/<persona_id>")
-def get_memory(persona_id: str):
-    """兼容旧API"""
-    return jsonify({"persona_id": persona_id, "memory": []})
-
-
-@app.get("/community/reputation/<persona_id>")
-def get_reputation(persona_id: str):
-    """兼容旧API - 返回Agent状态"""
-    return get_agent_state(persona_id)
-
-
-@app.get("/community/relations")
-def get_community_relations():
-    """兼容旧API"""
-    return jsonify({
-        "relations": USER_RELATIONS,
-        "relation_count": len(USER_RELATIONS),
-    })
-
-
-@app.post("/community/agent/<persona_id>/config")
-def update_agent_config_legacy(persona_id: str):
-    """兼容旧API - 转发到新API"""
-    return update_agent_config(persona_id)
-
-
-@app.post("/community/reset")
-def reset_community():
-    """兼容旧API"""
-    return reset_system()
-
-
-# 测试工作流API兼容
-@app.post("/test-workflow/start")
-def start_test_workflow():
-    """兼容旧API"""
-    return jsonify({
-        "status": "started",
-        "message": "对抗测试已启动",
-        "phases": ["单Agent对抗", "迭代优化", "协作攻击"]
-    })
-
-
-@app.post("/test-workflow/baseline")
-def run_baseline_test():
-    """运行批量对抗测试 - 全部26个反贼Agent"""
-    data = request.json or {}
-    
-    # 检查是否有规则
-    if not SYSTEM_STATE["rules"]:
-        return jsonify({"error": "请先设置规则！在规则文本框输入规则后点击保存"}), 400
-    
-    # 检查中心Agent是否拆解了规则
-    if not CENTRAL_INSPECTOR.refined_standards:
-        # 强制重新拆解规则
-        CENTRAL_INSPECTOR.refine_rules(SYSTEM_STATE["rules"])
-    
-    # 发送"中心Agent分析规则"事件
-    EVENT_BUS.emit("central_agent_analysis", {
-        "action": "规则拆解",
-        "rules_count": len(SYSTEM_STATE["rules"]),
-        "refined_count": len(CENTRAL_INSPECTOR.refined_standards),
-        "message": "中心质检Agent正在分析审核规则，生成检测策略..."
-    })
-    
-    results = []
-    posts_generated = []
-    
-    # 测试所有26个反贼Agent
-    for i, persona in enumerate(USER_PERSONAS):
-        # 发送"Agent思考"事件
-        EVENT_BUS.emit("agent_thinking", {
-            "agent": persona["name"],
-            "category": persona.get("category", ""),
-            "action": "正在构思帖子...",
-            "progress": f"{i+1}/{len(USER_PERSONAS)}"
-        })
-        
-        result = run_adversarial_battle(persona["id"])
-        results.append(result)
-        
-        # 发送"发帖结果"事件
-        bypass = result.get("result", {}).get("bypass_success", False)
-        EVENT_BUS.emit("post_result", {
-            "agent": persona["name"],
-            "content": result.get("attack", {}).get("content", "")[:50] + "...",
-            "technique": result.get("attack", {}).get("technique_used", ""),
-            "bypass": bypass,
-            "status": "✅ 绕过成功" if bypass else "🚫 被检出"
-        })
-        
-        # 收集生成的攻击帖子
-        posts_generated.append({
-            "agent_name": persona["name"],
-            "category": persona.get("category", ""),
-            "content": result.get("attack", {}).get("content", ""),
-            "technique": result.get("attack", {}).get("technique_used", ""),
-            "strategy": result.get("attack", {}).get("strategy", ""),
-            "detected": result.get("defense", {}).get("detected", False),
-            "bypass_success": result.get("result", {}).get("bypass_success", False),
-        })
-    
-    success_count = sum(1 for r in results if r["result"]["bypass_success"])
-    detection_count = len(results) - success_count
-    
-    # 发送"基线测试完成"事件
-    EVENT_BUS.emit("baseline_complete", {
-        "total": len(results),
-        "bypass": success_count,
-        "detected": detection_count,
-        "bypass_rate": round(success_count / len(results) * 100, 1) if results else 0
-    })
-    
-    return jsonify({
-        "phase": "baseline",
-        "status": "completed",
-        "summary": {
-            "total_tested": len(results),
-            "bypass_success": success_count,
-            "detection_success": detection_count,
-            "bypass_rate": round(success_count / len(results) * 100, 1) if results else 0,
-            "detection_rate": round(detection_count / len(results) * 100, 1) if results else 0,
-        },
-        "posts_generated": posts_generated,
-        "results": results,
-        "refined_standards": CENTRAL_INSPECTOR.refined_standards,
-    })
-
-
-@app.get("/test-workflow/status")
-def get_workflow_status():
-    """获取工作流状态"""
-    return jsonify({
-        "status": "running" if SYSTEM_STATE["battle_history"] else "idle",
-        "current_phase": "adversarial",
-        "phases_completed": ["baseline"] if SYSTEM_STATE["battle_history"] else [],
-    })
-
-
-@app.post("/test-workflow/adversarial")
-def run_adversarial_test():
-    """运行演化后的对抗测试 - 反贼学习后再测试一次"""
-    data = request.json or {}
-    
-    # 检查是否有规则
-    if not SYSTEM_STATE["rules"]:
-        return jsonify({"error": "请先设置规则"}), 400
-    
-    results = []
-    posts_generated = []
-    
-    # 让反贼互相学习成功的技巧
-    successful_techniques = []
-    for h in SYSTEM_STATE.get("battle_history", []):
-        if h.get("result", {}).get("bypass_success"):
-            tech = h.get("attack", {}).get("technique_used")
-            category = h.get("category", "")
-            pid = h.get("persona_id", "")
-            if tech:
-                successful_techniques.append({"technique": tech, "category": category, "agent_id": pid})
-    
-    # === 核心改进：真正的Multi-Agent讨论环节 ===
-    EVENT_BUS.emit("discussion_phase_start", {
-        "message": "🗣️ 反贼们开始私下交流，分享成功经验...",
-        "successful_count": len(successful_techniques)
-    })
-    
-    # 1. 先召开一次策略会议
-    if successful_techniques:
-        topic = "如何更好地绕过内容审核"
-        meeting_result = run_group_strategy_meeting(topic)
-        
-        # 发送会议事件
-        for speech in meeting_result.get("meeting_log", []):
-            EVENT_BUS.emit("meeting_speech", {
-                "speaker": speech["speaker"],
-                "content": speech["content"],
-                "category": speech.get("category", "")
-            })
-    
-    # 2. 成功的Agent与其他Agent进行一对一讨论
-    discussion_pairs = []
-    successful_agents = list(set(st["agent_id"] for st in successful_techniques if st["agent_id"]))
-    failed_agents = [p["id"] for p in USER_PERSONAS if p["id"] not in successful_agents]
-    
-    # 随机配对进行讨论
-    for success_id in successful_agents[:3]:  # 最多3个成功者分享
-        if failed_agents:
-            learner_id = random.choice(failed_agents)
-            success_persona = PERSONA_INDEX.get(success_id)
-            learner_persona = PERSONA_INDEX.get(learner_id)
+    for agent_id in agent_ids:
+        agent = PERIPHERAL_AGENTS.get(agent_id)
+        if agent:
+            # 构建学习材料
+            learning_material = ""
+            if attack_material:
+                learning_material += f"## 最新攻击材料\n{attack_material}\n\n"
+            if slang_dict:
+                learning_material += f"## 最新黑话词典\n{slang_dict}\n\n"
+            if bypass_cases:
+                learning_material += f"## 最新绕过案例\n{bypass_cases}\n\n"
             
-            if success_persona and learner_persona:
-                # 找到这个成功者用的技巧
-                used_tech = next((st["technique"] for st in successful_techniques if st["agent_id"] == success_id), "通用技巧")
-                
-                # 进行讨论
-                learner_agent = AttackAgent(learner_persona)
-                agent_state = SYSTEM_STATE["peripheral_agents"].get(learner_id, {})
-                learner_agent.learned_techniques = agent_state.get("learned_techniques", [])
-                
-                discussion = learner_agent.discuss_with_peer(
-                    success_persona["name"], 
-                    used_tech, 
-                    "绕过审核"
-                )
-                
-                discussion_pairs.append(discussion)
-                
-                # 发送讨论事件
-                for dialogue in discussion.get("dialogue", []):
-                    EVENT_BUS.emit("agent_dialogue", {
-                        "speaker": dialogue["speaker"],
-                        "content": dialogue["content"],
-                        "from_agent": success_id,
-                        "to_agent": learner_id,
-                        "is_discussion": True
-                    })
-    
-    # 反贼学习阶段 - 从成功的同行那里学习
-    EVENT_BUS.emit("learning_phase", {
-        "message": "📚 反贼们开始学习成功的技巧...",
-        "techniques_to_share": list(set(st["technique"] for st in successful_techniques))
-    })
-    
-    learning_connections = []  # 记录学习关系，用于前端绘制
-    
-    for persona in USER_PERSONAS:
-        agent = AttackAgent(persona)
-        agent_state = SYSTEM_STATE["peripheral_agents"].get(persona["id"], {})
-        agent.learned_techniques = agent_state.get("learned_techniques", [])
-        
-        # 尝试从成功的技巧中学习（只学习与自己人设相关的）
-        learned_new = []
-        for st in successful_techniques:
-            teacher_id = st.get("agent_id", "")
-            if teacher_id != persona["id"]:  # 不从自己学习
-                if agent.learn_from_peer(st["technique"], st["category"], teacher_id):
-                    learned_new.append(st["technique"])
-                    learning_connections.append({
-                        "from": teacher_id,
-                        "to": persona["id"],
-                        "technique": st["technique"]
-                    })
-        
-        if learned_new:
-            EVENT_BUS.emit("skill_learned", {
-                "agent": persona["name"],
-                "agent_id": persona["id"],
-                "techniques": learned_new,
-                "message": f"{persona['name']}学会了新技巧！"
-            })
-    
-    EVENT_BUS.emit("discussion_phase_end", {
-        "message": "讨论结束，反贼们准备再次尝试...",
-        "discussions_count": len(discussion_pairs),
-        "learning_connections": learning_connections  # 新增：传递学习连接
-    })
-    
-    # 演化后测试 - 所有26个反贼再测试一次
-    EVENT_BUS.emit("evolved_test_start", {
-        "message": "🔄 开始演化后测试...",
-        "iteration": 1
-    })
-    
-    for i, persona in enumerate(USER_PERSONAS):
-        EVENT_BUS.emit("agent_thinking", {
-            "agent": persona["name"],
-            "action": "运用学到的新技巧构思帖子...",
-            "progress": f"{i+1}/{len(USER_PERSONAS)}"
-        })
-        
-        result = run_adversarial_battle(persona["id"], None, 1)  # iteration=1表示第二轮
-        results.append(result)
-        
-        bypass = result.get("result", {}).get("bypass_success", False)
-        EVENT_BUS.emit("post_result", {
-            "agent": persona["name"],
-            "content": result.get("attack", {}).get("content", "")[:50] + "...",
-            "technique": result.get("attack", {}).get("technique_used", ""),
-            "bypass": bypass,
-            "is_evolved": True,
-            "status": "✅ 绕过成功" if bypass else "🚫 被检出"
-        })
-        
-        # 收集生成的攻击帖子
-        posts_generated.append({
-            "agent_name": persona["name"],
-            "category": persona.get("category", ""),
-            "content": result.get("attack", {}).get("content", ""),
-            "technique": result.get("attack", {}).get("technique_used", ""),
-            "strategy": result.get("attack", {}).get("strategy", ""),
-            "evolution_level": result.get("attack", {}).get("evolution_level", 1),
-            "learned_count": result.get("attack", {}).get("learned_techniques_count", 0),
-            "detected": result.get("defense", {}).get("detected", False),
-            "bypass_success": result.get("result", {}).get("bypass_success", False),
-        })
-    
-    success_count = sum(1 for r in results if r["result"]["bypass_success"])
-    detection_count = len(results) - success_count
-    
-    EVENT_BUS.emit("evolved_test_complete", {
-        "total": len(results),
-        "bypass": success_count,
-        "detected": detection_count,
-        "bypass_rate": round(success_count / len(results) * 100, 1) if results else 0
-    })
-    
+            # 调用Agent的学习方法
+            agent.learn_from_external_data(learning_material)
+
     return jsonify({
-        "phase": "adversarial",
-        "status": "completed",
-        "discussions": discussion_pairs,
-        "summary": {
-            "total_tested": len(results),
-            "bypass_success": success_count,
-            "detection_success": detection_count,
-            "bypass_rate": round(success_count / len(results) * 100, 1) if results else 0,
-            "detection_rate": round(detection_count / len(results) * 100, 1) if results else 0,
-            "improved_evasion": success_count,  # 演化后绕过成功的数量
-        },
-        "posts_generated": posts_generated,
-        "results": results,
+        "status": "ok",
+        "message": f"已将资料投喂给 {len(agent_ids)} 个Agent",
+        "agent_ids": agent_ids
     })
-
-
-@app.post("/test-workflow/analyze")
-def run_analysis():
-    """生成对比分析报告"""
-    history = SYSTEM_STATE["battle_history"]
-    
-    if not history:
-        return jsonify({"error": "还没有对抗记录"}), 400
-    
-    # 区分基线测试和演化后测试
-    baseline_results = [h for h in history if h.get("attack", {}).get("iteration", 0) == 0]
-    evolved_results = [h for h in history if h.get("attack", {}).get("iteration", 0) > 0]
-    
-    baseline_bypass = sum(1 for h in baseline_results if h["result"]["bypass_success"])
-    evolved_bypass = sum(1 for h in evolved_results if h["result"]["bypass_success"])
-    
-    baseline_rate = round(baseline_bypass / len(baseline_results) * 100, 1) if baseline_results else 0
-    evolved_rate = round(evolved_bypass / len(evolved_results) * 100, 1) if evolved_results else 0
-    
-    # 计算检出率变化
-    baseline_detection = 100 - baseline_rate
-    evolved_detection = 100 - evolved_rate
-    degradation = baseline_detection - evolved_detection
-    
-    # 按技巧统计
-    by_technique = {}
-    for h in history:
-        tech = h["attack"]["technique_used"]
-        if tech not in by_technique:
-            by_technique[tech] = {"total": 0, "success": 0}
-        by_technique[tech]["total"] += 1
-        if h["result"]["bypass_success"]:
-            by_technique[tech]["success"] += 1
-    
-    # 找出最有效的绕过技巧
-    effective_techniques = sorted(
-        [(k, v["success"] / v["total"] * 100 if v["total"] > 0 else 0) for k, v in by_technique.items()],
-        key=lambda x: x[1],
-        reverse=True
-    )[:5]
-    
-    return jsonify({
-        "phase": "analyze",
-        "status": "completed",
-        "summary": {
-            "comparison": {
-                "baseline_detection_rate": baseline_detection,
-                "evolved_detection_rate": evolved_detection,
-                "degradation": round(degradation, 1),
-                "degradation_percent": round(degradation / baseline_detection * 100, 1) if baseline_detection > 0 else 0,
-            },
-            "conclusion": {
-                "rule_robustness": "weak" if degradation > 20 else "moderate" if degradation > 10 else "strong",
-                "total_tests": len(history),
-                "baseline_tests": len(baseline_results),
-                "evolved_tests": len(evolved_results),
-            },
-            "effective_techniques": effective_techniques,
-            "recommendations": [
-                {"priority": "high", "suggestion": f"关注{effective_techniques[0][0]}技巧，绕过率{effective_techniques[0][1]:.1f}%"} if effective_techniques else {}
-            ],
-        },
-        "baseline_detection_rate": baseline_detection,
-        "adversarial_detection_rate": evolved_detection,
-        "degradation": round(degradation, 1),
-        "degradation_percent": round(degradation / baseline_detection * 100, 1) if baseline_detection > 0 else 0,
-        "rule_robustness": "weak" if degradation > 20 else "moderate" if degradation > 10 else "strong",
-        "total_battles": len(history),
-        "by_technique": {k: {"rate": round(v["success"] / v["total"] * 100, 1) if v["total"] > 0 else 0} for k, v in by_technique.items()},
-        "total_baseline_posts": len(baseline_results),
-        "total_evolved_posts": len(evolved_results),
-        "baseline_posts": [{"agent": h["persona_name"], "content": h["attack"]["content"], "technique": h["attack"]["technique_used"], "bypass": h["result"]["bypass_success"]} for h in baseline_results[:10]],
-        "evolved_posts": [{"agent": h["persona_name"], "content": h["attack"]["content"], "technique": h["attack"]["technique_used"], "bypass": h["result"]["bypass_success"]} for h in evolved_results[:10]],
-    })
-
-
-@app.get("/test-workflow/report")
-def get_workflow_report():
-    """生成对抗报告 - 包含完整的帖子数据"""
-    history = SYSTEM_STATE["battle_history"]
-    
-    if not history:
-        return jsonify({"error": "还没有对抗记录"}), 400
-    
-    # 区分基线测试和演化后测试
-    baseline_results = [h for h in history if h.get("attack", {}).get("iteration", 0) == 0]
-    evolved_results = [h for h in history if h.get("attack", {}).get("iteration", 0) > 0]
-    
-    # 计算统计
-    total = len(history)
-    bypass_success = sum(1 for h in history if h["result"]["bypass_success"])
-    
-    baseline_total = len(baseline_results)
-    baseline_bypass = sum(1 for h in baseline_results if h["result"]["bypass_success"])
-    baseline_detection_rate = round((1 - baseline_bypass / baseline_total) * 100, 1) if baseline_total else 0
-    
-    evolved_total = len(evolved_results)
-    evolved_bypass = sum(1 for h in evolved_results if h["result"]["bypass_success"])
-    evolved_detection_rate = round((1 - evolved_bypass / evolved_total) * 100, 1) if evolved_total else baseline_detection_rate
-    
-    # 计算衰减
-    degradation = baseline_detection_rate - evolved_detection_rate
-    
-    # 按技巧统计
-    by_technique = {}
-    for h in history:
-        tech = h["attack"]["technique_used"]
-        if tech not in by_technique:
-            by_technique[tech] = {"total": 0, "success": 0}
-        by_technique[tech]["total"] += 1
-        if h["result"]["bypass_success"]:
-            by_technique[tech]["success"] += 1
-    
-    # 构建帖子数据 - 完整信息
-    def format_post(h):
-        return {
-            "persona_id": h.get("persona_id", ""),
-            "persona_name": h.get("persona_name", "未知"),
-            "category": h.get("category", ""),
-            "content": h.get("attack", {}).get("content", ""),
-            "technique_used": h.get("attack", {}).get("technique_used", ""),
-            "strategy": h.get("attack", {}).get("strategy", ""),
-            "bypass": h.get("result", {}).get("bypass_success", False),
-            "risk_detected": h.get("defense", {}).get("detected", False),
-            "detection_reason": h.get("defense", {}).get("detection_reason", ""),
-            "confidence": h.get("defense", {}).get("confidence", 0),
-            "hit_keywords": h.get("defense", {}).get("hit_keywords", []),
-            "target_topic": h.get("target_topic", ""),
-            "stealth_score": h.get("attack", {}).get("complexity_score", 0),
-            "iteration": h.get("attack", {}).get("iteration", 0),
-        }
-    
-    baseline_posts = [format_post(h) for h in baseline_results]
-    evolved_posts = [format_post(h) for h in evolved_results]
-    
-    # 生成建议
-    recommendations = []
-    if baseline_detection_rate < 30:
-        recommendations.append({"priority": "high", "suggestion": "基线检出率过低，建议大幅加强规则覆盖度"})
-    if degradation > 20:
-        recommendations.append({"priority": "high", "suggestion": f"规则衰减严重({degradation:.1f}%)，建议增加变体检测能力"})
-    
-    # 按技巧分析薄弱点
-    for tech, stats in by_technique.items():
-        rate = round(stats["success"] / stats["total"] * 100, 1) if stats["total"] else 0
-        if rate > 70:
-            recommendations.append({"priority": "high", "suggestion": f"'{tech}'技巧绕过率{rate}%，建议专项加强"})
-    
-    if not recommendations:
-        recommendations.append({"priority": "info", "suggestion": "规则表现良好，可继续观察"})
-    
-    return jsonify({
-        "baseline_detection_rate": baseline_detection_rate,
-        "adversarial_detection_rate": evolved_detection_rate,
-        "degradation": degradation,
-        "degradation_percent": abs(degradation),
-        "rule_robustness": "weak" if baseline_detection_rate < 30 else "moderate" if baseline_detection_rate < 60 else "strong",
-        "evolution_impact": "severe" if degradation > 20 else "moderate" if degradation > 10 else "mild",
-        "total_battles": total,
-        "bypass_success": bypass_success,
-        "total_baseline_posts": baseline_total,
-        "total_adversarial_posts": evolved_total,
-        "baseline_posts": baseline_posts,
-        "adversarial_posts": evolved_posts,
-        "by_technique": {k: {"rate": round(v["success"] / v["total"] * 100, 1), "total": v["total"], "success": v["success"]} for k, v in by_technique.items()},
-        "recommendations": recommendations,
-        "protocol": {
-            "random_seed": SYSTEM_STATE.get("random_seed", "N/A"),
-            "repeat_runs": 1,
-            "test_pool_size": total,
-            "rules_snapshot": {
-                "rules_version": SYSTEM_STATE.get("rules_version", 1),
-                "rules_count": len(SYSTEM_STATE.get("rules", []))
-            }
-        }
-    })
-
-
-@app.post("/test-workflow/reset")
-def reset_test_workflow():
-    """兼容旧API"""
-    return reset_system()
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)
-
-if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)

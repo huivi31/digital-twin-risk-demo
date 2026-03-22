@@ -1,4 +1,4 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.4.0
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.6.0
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 
@@ -8,15 +8,18 @@ This project implements a digital twin environment where AI agents act as "attac
 
 ### 1. 🧠 Autonomous Attack Agents
 
-- **Persona-Driven**: 26 distinct user personas (e.g., "Keyboard Warrior", "Reviewer", "Troll") with unique behaviors.
+- **Persona-Driven**: 72 distinct user personas across 6 groups (G1史鉴组, G2黑话组, G3阴阳组, G4同音组, G5反串组, G6暗流组) with unique behaviors and specialized attack methods.
 - **Adaptive Strategy**: Agents learn from failures, escalating their strategies from simple keyword evasion to complex semantic attacks.
 - **Knowledge Sharing**: Agents share successful bypass techniques with each other through simulated "discussions" and "strategy meetings".
-- **Techniques**: Supports various evasion methods:
-  - Homophones & Pinyin (e.g., "zf" for Government)
-  - Emoji & Symbols
-  - Historical Allusions
-  - Multilingual Mixing
-  - Semantic Sarcasm
+- **Attack Methods**: Agents employ 3 major attack methods:
+  - **语言变异类 (Language Variation)**
+  - **隐喻影射类 (Metaphorical Allusion)**
+  - **社交黑话类 (Social Slang)**
+- **Capability Dimensions**: Each agent is characterized by 4 capability dimensions:
+  - **语言变异度 (Language Variation Degree)**
+  - **历史文化厚度 (Historical and Cultural Depth)**
+  - **圈层专业度 (Circle Professionalism)**
+  - **社会心理操纵度 (Social Psychological Manipulation Degree)**
 
 ### 2. 🛡️ Multi-Layer Defense System
 
@@ -43,14 +46,19 @@ A robust, deterministic rule engine that operates in 5 layers:
   - **Bypass Cases (绕过案例)**: Examples of successful evasion (Badcase).
 - Agents digest this knowledge to craft more realistic attacks.
 
+### 5. 🌐 Frontend Enhancements
+
+- **资料投喂 (Data Feeding) Window**: A dedicated section on the left side of the webpage for users to manually input attack materials, slang dictionaries, and bypass cases for agent learning.
+- **Version Display**: The current version number (v2.6.0) is displayed on the webpage.
+
 ## 🚀 Architecture
 
-- **`agents.py`**: Defines `AttackAgent`, `CentralInspectorAgent`, and system state.
+- **`agents.py`**: Defines `CentralInspectorAgent`, `AttackAgent`, system state, and the new V2 Agent generation logic.
 - **`battle.py`**: Implements the adversarial loop, agent discussions, and strategy meetings.
 - **`rule_engine.py`**: The deterministic 5-layer content inspection engine.
-- **`attack_knowledge.py`**: Manages the knowledge base, few-shot examples, and strategy escalation.
-- **`web_app.py`**: Flask server providing APIs for the frontend.
-- **`templates/index.html`**: 3D Visualization frontend (Three.js + React-like UI).
+- **`attack_knowledge_v2.py`**: Manages the knowledge base, few-shot examples, and strategy escalation, updated for V2 attack methods and capability dimensions.
+- **`web_app.py`**: Flask server providing APIs for the frontend, including the new `/agent/feed` endpoint.
+- **`templates/index.html`**: 3D Visualization frontend (Three.js + React-like UI) with new data feeding window and version display.
 
 ## 🛠️ Usage
 
@@ -71,13 +79,13 @@ pip install -r requirements.txt
 python web_app.py
 ```
 
-Access the dashboard at `http://localhost:8000`
+Access the dashboard at `http://localhost:5000`
 
 ## 📊 Workflow
 
 1. **Rule Setup**: Define your content moderation rules in the UI.
-2. **Knowledge Feed (Optional)**: Feed the agents with latest internet slang or attack examples.
-3. **Baseline Test**: Run a test against all 26 agents.
+2. **Knowledge Feed (Optional)**: Feed the agents with latest internet slang or attack examples via the new "资料投喂" window.
+3. **Baseline Test**: Run a test against all 72 agents.
 4. **Evolution**: Watch agents discuss and learn from each other.
 5. **Adversarial Test**: See if the agents can now bypass your rules with their new knowledge.
 6. **Analysis**: Review the report to see which rules failed and which techniques are most effective.

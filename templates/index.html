@@ -7,7 +7,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>数字孪生风控风洞 | Digital Twin Risk Wind Tunnel v2</title>
+  <title>数字孪生风控风洞 | Digital Twin Risk Wind Tunnel v2.6.0</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
     * {
@@ -150,10 +150,59 @@
       margin-top: 4px;
     }
 
-    /* 左侧筛选面板 */
+    /* 资料投喂面板 */
+    .feed-panel {
+      position: fixed;
+      top: 70px;
+      left: 12px;
+      width: 160px;
+      background: rgba(0, 15, 30, 0.9);
+      border: 1px solid rgba(0, 200, 255, 0.2);
+      border-radius: 12px;
+      padding: 14px;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(0, 200, 255, 0.1);
+    }
+
+    .feed-panel .section-title {
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(0, 200, 255, 0.15);
+    }
+
+    .feed-panel textarea {
+      width: 100%;
+      background: rgba(0, 20, 40, 0.8);
+      border: 1px solid rgba(0, 200, 255, 0.25);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: #e0f8ff;
+      font-size: 11px;
+      outline: none;
+      transition: all 0.3s;
+      font-family: inherit;
+      min-height: 60px;
+      resize: vertical;
+      margin-bottom: 10px;
+    }
+
+    .feed-panel textarea:focus {
+      border-color: #00d4ff;
+      box-shadow: 0 0 20px rgba(0, 200, 255, 0.25), inset 0 0 15px rgba(0, 200, 255, 0.1);
+    }
+
+    .feed-panel .btn-primary {
+      width: 100%;
+      padding: 10px 15px;
+      font-size: 11px;
+    }
+
+
     .filter-panel {
       position: fixed;
       top: 70px;
+      margin-top: 480px; /* Adjust this value to position it below the feed panel */
       left: 12px;
       width: 160px;
       background: rgba(0, 15, 30, 0.9);
@@ -997,8 +1046,27 @@
     </div>
   </div>
 
-  <!-- 左侧筛选 -->
-  <div class="filter-panel">
+    <!-- 左侧筛选 -->
+    <div class="feed-panel">
+      <div class="section-title">资料投喂</div>
+      <div class="form-group">
+        <label for="attackMaterial">攻击材料</label>
+        <textarea id="attackMaterial" placeholder="输入攻击材料，如文章、段落..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="slangDictionary">黑话词典</label>
+        <textarea id="slangDictionary" placeholder="输入黑话词典，如：'yyds: 永远的神'..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="bypassCases">绕过案例</label>
+        <textarea id="bypassCases" placeholder="输入绕过案例，如：'通过谐音字绕过'..."></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="feedAgent()">投喂资料</button>
+    </div>
+
+
+
+    <div class="filter-panel">
     <div class="filter-title">User Categories</div>
     <div id="filterList"></div>
   </div>
@@ -4856,7 +4924,37 @@ ${defense.hit_keywords?.length ? `命中关键词: ${defense.hit_keywords.join('
     } else {
       safeInit();
     }
-  </script>
+    </script>
+    <script>
+      async function feedAgent() {
+        const attackMaterial = document.getElementById('attackMaterial').value;
+        const slangDictionary = document.getElementById('slangDictionary').value;
+        const bypassCases = document.getElementById('bypassCases').value;
+
+        const response = await fetch('/agent/feed', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            attack_material: attackMaterial,
+            slang_dict: slangDictionary,
+            bypass_cases: bypassCases,
+          }),
+        });
+
+        const result = await response.json();
+        if (result.status === 'ok') {
+          alert('资料投喂成功！');
+          // 清空输入框
+          document.getElementById('attackMaterial').value = '';
+          document.getElementById('slangDictionary').value = '';
+          document.getElementById('bypassCases').value = '';
+        } else {
+          alert('资料投喂失败: ' + result.error);
+        }
+      }
+    </script>
 </body>
 
 </html>
