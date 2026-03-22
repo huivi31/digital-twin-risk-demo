@@ -6,6 +6,6 @@ services:
     startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
-      - key: GEMINI_API_KEY
-        value: AIzaSyA3BK8OguVPVtz0J6YA7stqtWnido-Iv7Y
+        value: 3.11.0rc1
+      - key: OPENAI_API_KEY
+        sync: false
