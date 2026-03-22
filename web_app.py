@@ -9,7 +9,7 @@ import random
 import time
 
 from config import API_CONFIG
-from user_personas import USER_PERSONAS, USER_RELATIONS, COMMUNITY_CONFIG
+from user_personas import BASE_PERSONAS as USER_PERSONAS
 from rule_engine import RULE_ENGINE
 from attack_knowledge import KNOWLEDGE_STORE
 
@@ -317,7 +317,7 @@ def reset_system():
     RULE_ENGINE.reset_stats()
     RULE_ENGINE.set_rules([])
     RULE_ENGINE.custom_variants = {}
-    KNOWLEDGE_STORE.dlear()
+    KNOWLEDGE_STORE.clear()
     
     return jsonify({"status": "reset", "message": "系统已重置"})
 
@@ -325,6 +325,46 @@ def reset_system():
 @app.get("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+# ============================================================================
+# 知识投喂 API
+# ============================================================================
+
+@app.post("/feed/materials")
+def feed_materials():
+    """投喂攻击材料"""
+    data = request.json or {}
+    texts = data.get("texts", [])
+    category = data.get("category", "通用")
+    count = KNOWLEDGE_STORE.feed_materials(texts, category)
+    return jsonify({"status": "ok", "fed_count": count, "knowledge_version": KNOWLEDGE_STORE.version})
+
+@app.post("/feed/slang")
+def feed_slang():
+    """投喂行业黑话/暗语"""
+    data = request.json or {}
+    entries = data.get("entries", [])
+    count = KNOWLEDGE_STORE.feed_slang(entries)
+    return jsonify({"status": "ok", "fed_count": count, "knowledge_version": KNOWLEDGE_STORE.version})
+
+@app.post("/feed/cases")
+def feed_cases():
+    """投喂绕过案例"""
+    data = request.json or {}
+    cases = data.get("cases", [])
+    count = KNOWLEDGE_STORE.feed_cases(cases)
+    return jsonify({"status": "ok", "fed_count": count, "knowledge_version": KNOWLEDGE_STORE.version})
+
+@app.get("/knowledge/status")
+def get_knowledge_status():
+    """获取知识库状态"""
+    return jsonify({
+        "materials_count": len(KNOWLEDGE_STORE.fed_materials),
+        "slang_count": len(KNOWLEDGE_STORE.fed_slang),
+        "cases_count": len(KNOWLEDGE_STORE.fed_cases),
+        "version": KNOWLEDGE_STORE.version
+    })
 
 
 # ============================================================================
@@ -948,3 +988,6 @@ def reset_test_workflow():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
+
+if __name__ == "__main__":
+    app.run(debug=True, host='0.0.0.0', port=5000)

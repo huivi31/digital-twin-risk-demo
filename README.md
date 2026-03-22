@@ -1,4 +1,4 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen)
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.4.0
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 
@@ -37,10 +37,10 @@ A robust, deterministic rule engine that operates in 5 layers:
 
 ### 4. 🧠 Knowledge Feed System
 
-- Users can "feed" the agents with real-world data:
-  - **Attack Materials**: Text samples of real violations.
-  - **Slang Dictionary**: New internet slang definitions.
-  - **Bypass Cases**: Examples of successful evasion.
+- Users can **手动投喂 (manually feed)** the agents with real-world data, supplementing the agents' autonomous search capabilities:
+  - **Attack Materials (攻击材料)**: Text samples of real violations.
+  - **Slang Dictionary (黑话词典)**: New internet slang definitions.
+  - **Bypass Cases (绕过案例)**: Examples of successful evasion (Badcase).
 - Agents digest this knowledge to craft more realistic attacks.
 
 ## 🚀 Architecture

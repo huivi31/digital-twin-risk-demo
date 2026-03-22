@@ -253,6 +253,12 @@ class KnowledgeStore:
         # 投喂版本号
         self.version = 0
     
+    def clear(self):
+        self.fed_materials = []
+        self.fed_slang = []
+        self.fed_cases = []
+        self.version = 0
+    
     def feed_materials(self, texts: list, category: str = "通用") -> int:
         """投喂文本资料"""
         count = 0
