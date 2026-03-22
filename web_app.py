@@ -27,6 +27,27 @@ from battle import (
 app = Flask(__name__)
 
 # ============================================================================
+# 全局配置
+# ============================================================================
+
+# 用户关系图
+USER_RELATIONS = []
+for i, p1 in enumerate(USER_PERSONAS):
+    for p2 in USER_PERSONAS[i+1:]:
+        USER_RELATIONS.append({
+            "source": p1["id"],
+            "target": p2["id"],
+            "weight": random.random()
+        })
+
+# 社区配置
+COMMUNITY_CONFIG = {
+    "total_agents": len(USER_PERSONAS),
+    "categories": list(set(p.get("category", "其他") for p in USER_PERSONAS)),
+    "version": "v2.4.0"
+}
+
+# ============================================================================
 # API路由
 # ============================================================================
 
