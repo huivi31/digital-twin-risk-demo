@@ -1018,7 +1018,7 @@
     <div class="logo">
       <div class="logo-icon">🌐</div>
       <div>
-        <h1>RISK WIND TUNNEL</h1>
+        <h1>RISK WIND TUNNEL <span style="font-size: 12px; color: #00d4ff; margin-left: 10px; border: 1px solid #00d4ff; padding: 2px 6px; border-radius: 4px;">v2.6.0</span></h1>
         <div class="subtitle">数字孪生风控风洞系统</div>
       </div>
     </div>
@@ -1066,8 +1066,8 @@
 
 
 
-    <div class="filter-panel">
-    <div class="filter-title">User Categories</div>
+    <div class="filter-panel" style="top: 70px; left: 12px; width: 180px;">
+    <div class="filter-title">Agent Groups (72 Total)</div>
     <div id="filterList"></div>
   </div>
 
@@ -1238,7 +1238,7 @@
           <span>📚 知识投喂 / Knowledge Feed</span>
           <span style="font-size:9px;color:#8a6aaa;">▼ 展开</span>
         </div>
-        <div id="feedPanel" style="display:none;">
+        <div id="feedPanel" style="display:block;">
           <div style="display:flex;gap:6px;margin-bottom:6px;">
             <button class="btn btn-secondary" style="padding:4px 8px;font-size:9px;flex:1;"
               onclick="switchFeedTab('materials')" id="feedTabMaterials">📄 文本样本</button>
@@ -1383,7 +1383,7 @@
       <span>对抗系统运行中</span>
     </div>
     <div class="status-item">
-      <span>攻击Agent: <strong id="simUsers">26</strong></span>
+      <span>攻击Agent: <strong id="simUsers">{{ personas|length }}</strong></span>
     </div>
     <div class="status-item">
       <span>中心质检Agent: <strong>1</strong></span>
@@ -1904,7 +1904,14 @@
     }
 
     function initFilters() {
-      const categories = [...new Set(personas.map(p => p.category))];
+      // 改为按 group 分组，并排序 G1-G6
+      const categories = [...new Set(personas.map(p => p.group || '其他'))].sort((a, b) => {
+          if (a.startsWith('G') && b.startsWith('G')) {
+              return parseInt(a.substring(1)) - parseInt(b.substring(1));
+          }
+          return a.localeCompare(b);
+      });
+      
       const filterList = document.getElementById('filterList');
       filterList.innerHTML = `
         <div class="filter-item active" data-category="all" onclick="filterCategory('all')">
@@ -1912,10 +1919,10 @@
           <span>全部用户</span><span class="filter-count">${personas.length}</span>
         </div>
       `;
-      categories.forEach(cat => {
-        const count = personas.filter(p => p.category === cat).length;
-        const baseColor = categoryColors[cat] ?? 0x00d4ff;
-        const color = '#' + baseColor.toString(16).padStart(6, '0');
+      categories.forEach((cat, idx) => {
+        const count = personas.filter(p => p.group === cat).length;
+        const hue = (idx * 60); // 6组分配不同色相
+        const color = `hsl(${hue}, 70%, 50%)`;
         filterList.innerHTML += `
           <div class="filter-item" data-category="${cat}" onclick="filterCategory('${cat}')">
             <div class="filter-dot" style="background: ${color}; box-shadow: 0 0 12px ${color};"></div>
@@ -1933,7 +1940,8 @@
 
       nodeMeshes.forEach((mesh, i) => {
         const nodeData = nodesData[i];
-        const visible = category === 'all' || nodeData.category === category;
+        // 筛选逻辑改为匹配 group
+        const visible = category === 'all' || nodeData.group === category;
         mesh.visible = visible;
         nodeData.visible = visible;
       });

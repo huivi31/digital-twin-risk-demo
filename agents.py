@@ -18,13 +18,17 @@ SYSTEM_STATE = {
     "peripheral_agents": {}
 }
 
-EVENT_BUS = None # 簡化版，實際項目中應有完整的 EventBus 實現
 class SimpleEventBus:
+    def __init__(self):
+        self.events = []
     def emit(self, event_name, data):
-        # print(f"Event: {event_name}, Data: {data}")
-        pass
-    def get_recent(self, count, since):
-        return []
+        self.events.append({
+            "timestamp": time.time(),
+            "event": event_name,
+            "data": data
+        })
+    def get_recent(self, count=50, since=0):
+        return [e for e in self.events if e["timestamp"] > since][-count:]
 
 EVENT_BUS = SimpleEventBus()
 
@@ -32,13 +36,14 @@ EVENT_BUS = SimpleEventBus()
 # 輔助函數
 # ============================================================================
 def get_attack_examples(technique):
-    # 這裡應從 KNOWLEDGE_STORE 獲取，暫時返回空
-    return {"examples": [], "principles": []}
+    # 從 KNOWLEDGE_STORE 獲取對應技術的案例
+    return KNOWLEDGE_STORE.get_knowledge_by_technique(technique)
 
 def reset_system():
     SYSTEM_STATE["rules"] = []
     SYSTEM_STATE["rules_version"] = 0
     SYSTEM_STATE["battle_history"] = []
+    EVENT_BUS.events = []
 
 # ============================================================================
 # Agent 類定義
@@ -52,12 +57,15 @@ class BaseAgent:
         self.client = OpenAI()
 
     def _call_llm(self, prompt):
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
-        )
-        return response.choices[0].message.content.strip()
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"LLM Error: {str(e)}"
 
 class CentralAgent(BaseAgent):
     def __init__(self):
@@ -69,8 +77,8 @@ class CentralAgent(BaseAgent):
         for rule in rules:
             rule_id = rule.get("id")
             rule_text = rule.get("text")
-            # 這裡簡化，直接存儲
             self.refined_standards[rule_id] = {"original_rule": rule_text, "refined": {}}
+            EVENT_BUS.emit("inspector_rule_refined", {"rule_id": rule_id, "status": "success"})
 
     def get_stats(self):
         return self.detection_stats
@@ -90,11 +98,16 @@ class PeripheralAgent(BaseAgent):
             "persona": self.persona,
             "success_count": self.success_count,
             "fail_count": self.fail_count,
-            "evolution_level": self.evolution_level
+            "evolution_level": self.evolution_level,
+            "learned_count": len(self.learned_techniques)
         }
 
     def learn_from_external_data(self, data):
-        self.learned_techniques.append(data)
+        self.learned_techniques.append({
+            "timestamp": time.time(),
+            "content": data
+        })
+        EVENT_BUS.emit("agent_learned_external", {"agent_id": self.agent_id, "data_length": len(data)})
 
     def generate_attack_content(self, rule_text, keywords):
         technique = random.choice(self.persona["attack_techniques"])
@@ -107,6 +120,7 @@ class PeripheralAgent(BaseAgent):
         techniques_str = ', '.join(self.persona['attack_techniques'])
         
         fed_knowledge = KNOWLEDGE_STORE.get_full_knowledge_for_prompt()
+        learned_context = "\n".join([lt["content"] for lt in self.learned_techniques[-3:]])
 
         ability_prompts = []
         for dim, value in self.persona["abilities"].items():
@@ -120,10 +134,18 @@ class PeripheralAgent(BaseAgent):
 人設：{self.persona['description']}
 手法：{technique}
 {ability_instruction}
+
+【已知對抗知識】
 {fed_knowledge}
-請輸出攻擊內容。"""
+
+【新投餵的學習材料】
+{learned_context}
+
+請輸出攻擊內容。只輸出內容，不要解釋。"""
+        
+        content = self._call_llm(prompt)
         return {
-            "content": self._call_llm(prompt),
+            "content": content,
             "technique": technique,
             "persona_id": self.agent_id
         }
@@ -137,7 +159,5 @@ PERIPHERAL_AGENTS = {p["id"]: PeripheralAgent(p) for p in GENERATED_USER_PERSONA
 
 # 兼容性別名
 AttackAgent = PeripheralAgent
-
-# 更多兼容性別名
 CENTRAL_INSPECTOR = CENTRAL_AGENT
 ATTACK_AGENTS = PERIPHERAL_AGENTS
