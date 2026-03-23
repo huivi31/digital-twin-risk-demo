@@ -1738,16 +1738,17 @@
     }
 
     function createNodes() {
-      // 把Agent分布在几个纬度环上，更整齐美观
+      // 72个Agent分布
       console.log(`准备放置 ${personas.length} 个Agent`);
 
-      // 定义几个纬度环（从上到下）
+      // 定义更多纬度环以容纳 72 个 Agent
       const latitudes = [
-        { y: 0.85, count: 4 },   // 顶部环 - 4个
-        { y: 0.5, count: 6 },    // 上部环 - 6个
-        { y: 0.1, count: 8 },    // 中上环 - 8个
-        { y: -0.3, count: 6 },   // 中下环 - 6个
-        { y: -0.7, count: 2 }    // 底部环 - 2个
+        { y: 0.85, count: 8 },   
+        { y: 0.6, count: 12 },   
+        { y: 0.3, count: 16 },   
+        { y: 0.0, count: 16 },   
+        { y: -0.3, count: 12 },  
+        { y: -0.6, count: 8 }    
       ];
 
       let personaIndex = 0;
@@ -1764,12 +1765,17 @@
           const z = ringRadius * Math.sin(angle);
 
           const pos = new THREE.Vector3(x, y, z);
-          const color = categoryColors[persona.category] || 0x00d4ff;
+          
+          // 根据分组分配颜色
+          const groupIdx = parseInt(persona.group.substring(1)) - 1;
+          const hue = (groupIdx * 60);
+          const color = new THREE.Color(`hsl(${hue}, 70%, 50%)`).getHex();
 
           const nodeData = {
             id: persona.id,
             name: persona.name,
-            category: persona.category,
+            group: persona.group, // 确保 nodeData 包含 group
+            category: persona.category || persona.group,
             description: persona.description,
             patterns: persona.behavior_patterns,
             position: pos,
