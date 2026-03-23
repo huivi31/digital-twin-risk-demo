@@ -1,3 +1,4 @@
+import random
 '''
 用户数字孪生风控风洞系统 - 意图驱动型角色库 v2.5.0
 
@@ -124,3 +125,22 @@ BASE_PERSONAS = [
 ]
 
 # ... (The rest of the file remains the same) ...
+
+# 兼容性補充：生成 GENERATED_USER_PERSONAS
+GENERATED_USER_PERSONAS = []
+for p in BASE_PERSONAS:
+    persona = p.copy()
+    # 確保包含 agents.py 需要的字段
+    if "attack_techniques" not in persona:
+        persona["attack_techniques"] = list(persona.get("technique_affinity", {}).keys()) or ["通用绕过"]
+    if "abilities" not in persona:
+        persona["abilities"] = {
+            "语言变异度": random.uniform(0.1, 1.0),
+            "历史文化厚度": random.uniform(0.1, 1.0),
+            "圈层专业度": random.uniform(0.1, 1.0),
+            "社会心理操纵度": random.uniform(0.1, 1.0)
+        }
+    GENERATED_USER_PERSONAS.append(persona)
+
+# 兼容性別名
+USER_PERSONAS = PERSONA_INDEX = {p["id"]: p for p in GENERATED_USER_PERSONAS}

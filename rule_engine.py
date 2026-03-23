@@ -176,3 +176,29 @@ class RuleEngine:
                 return result.block("L5_Semantic", 5, f"LLM语义分析: {llm_result.get('reason', '未提供')}", 0.6, [llm_result.get("violation_type")])
         except Exception: pass
         return result
+
+class LegacyRuleEngine(RuleEngine):
+    def set_rules(self, rules):
+        """兼容 web_app.py 中的 set_rules 方法"""
+        standards = {}
+        for rule in rules:
+            rule_id = rule.get("id")
+            standards[rule_id] = {
+                "original_rule": rule.get("text"),
+                "detection_points": {
+                    "key_features": rule.get("keywords", [])
+                }
+            }
+        self.update_standards(standards)
+
+    def add_custom_variants(self, rule_text, variants):
+        """兼容 web_app.py 中的 add_custom_variants 方法"""
+        # 簡單實現，找到對應的 rule 並添加變體
+        for rule_id, standard in self.refined_standards.items():
+            if standard.get("original_rule") == rule_text:
+                if "text_variants" not in standard:
+                    standard["text_variants"] = {"custom": []}
+                standard["text_variants"]["custom"].extend(variants)
+                break
+
+RULE_ENGINE = LegacyRuleEngine()

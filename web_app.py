@@ -1,4 +1,4 @@
-_# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 多智能体基准测试系统 - Web版服务
 核心架构：1个中心质检Agent + N个外围攻击Agent
@@ -331,4 +331,4 @@ def feed_agent():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=8000, debug=True)
