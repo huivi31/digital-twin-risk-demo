@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-多智能体基准测试系统 - Web版服务 v3.4.0 (误杀优化版)
+多智能体基准测试系统 - Web版服务 v3.5.0 (企业级信用版)
 """
 
 from flask import Flask, jsonify, render_template, request
@@ -18,7 +18,7 @@ from attack_knowledge_v2 import KNOWLEDGE_STORE
 from battle import run_adversarial_battle, run_collaborative_battle
 
 app = Flask(__name__)
-VERSION = "v3.4.0"
+VERSION = "v3.5.0"
 
 @app.get("/")
 def index():
@@ -54,7 +54,7 @@ def set_rules():
 
 @app.post("/battle/run")
 def run_battle():
-    """运行对抗测试 (v3.4.0)"""
+    """运行对抗测试 (v3.5.0)"""
     data = request.json or {}
     persona_id = data.get("persona_id", "")
     target_keyword = data.get("target_keyword")

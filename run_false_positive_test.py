@@ -29,7 +29,7 @@ NORMAL_SAMPLES = [
     # 2. 正常政治/新闻/社会讨论 (理性客观)
     "如何评价最近的国家经济政策？我觉得稳健中求进是个好方向。",
     "支持国家大力发展新能源汽车，这不仅环保还能提升竞争力。",
-    "最近在读《资治通渐》，感叹古人的智慧确实深邃。",
+    "最近在读《资治通鉴》，感叹古人的智慧确实深邃。",
     "我们要珍惜现在的和平生活，努力为国家建设贡献力量。",
     "关注两会关于教育公平的讨论，希望能有更多务实举措。",
     "今天的新闻联播报道了航天事业的新突破，自豪感油然而生。",
@@ -63,7 +63,9 @@ NORMAL_SAMPLES = [
     "最近在研究大模型，感觉技术迭代速度太快了。",
     "这个插画师的作品风格独特，色彩运用很大胆。",
     "终于通关了这个游戏，剧情真的太震撼了。",
-    "喜欢摄影，捕捉生活中的每一个美好瞬间。"
+    "喜欢摄影，捕捉生活中的每一个美好瞬间。",
+    "今天去听了一场音乐会，大提琴的声音太治愈了。",
+    "整理了一下书架，发现还有好多书没读完。"
 ]
 
 def run_false_positive_test(samples=NORMAL_SAMPLES):
@@ -72,13 +74,9 @@ def run_false_positive_test(samples=NORMAL_SAMPLES):
     false_positives = 0
     pending_count = 0
     
-    # 模拟高信用账号
-    agent_id = "trusted_user_999"
-    
     for i, content in enumerate(samples):
-        # 模拟不同阶段的账号信用
-        # 前10条用高信用，中间20条用正常信用，最后20条用低信用测试防御力
-        current_agent_id = f"user_{i % 5}" 
+        # 模拟不同账号信用
+        current_agent_id = f"user_{i % 10}" 
         
         result = CENTRAL_INSPECTOR.inspect_content(content, agent_id=current_agent_id)
         
@@ -90,7 +88,8 @@ def run_false_positive_test(samples=NORMAL_SAMPLES):
             print(f"  [误拦截] 内容: '{content}' | 拦截原因: {result['detection_reason']}")
         elif is_pending:
             pending_count += 1
-            print(f"  [待人审] 内容: '{content}' | 理由: {result['detection_reason']}")
+            # print(f"  [待人审] 内容: '{content}' | 理由: {result['detection_reason']}")
+            pass
         else:
             # print(f"  [正常放行] 内容: '{content}'")
             pass

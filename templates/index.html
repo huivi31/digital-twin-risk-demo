@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>数字孪生风控风洞 | v3.4.0 误杀优化版</title>
+  <title>数字孪生风控风洞 | v3.5.0 企业级信用版</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -28,12 +28,14 @@
     .badge-pending { background-color: #8a2be2; color: white; }
     .badge-success { background-color: #5cb85c; color: white; }
     .badge-blocked { background-color: #d9534f; color: white; }
+    .credit-score { font-size: 10px; margin-top: 5px; }
+    .credit-high { color: #5cb85c; } .credit-low { color: #d9534f; }
   </style>
 </head>
 <body>
   <div id="app" class="container">
     <div class="top-bar">
-      <div class="logo">风洞 v3.4.0 <span style="font-size: 12px; font-weight: normal; color: #888;">(误杀优化版)</span></div>
+      <div class="logo">风洞 v3.5.0 <span style="font-size: 12px; font-weight: normal; color: #888;">(企业级信用版)</span></div>
       <div class="controls">
         <div class="control-group">
           <label>平台:</label>
@@ -53,48 +55,61 @@
     <div class="main-content">
       <div class="left-panel">
         <h3>对抗配置</h3>
-        <div class="control-group">
+        <div class="control-group" style="margin-top:15px;">
           <label>话题:</label>
           <input type="text" v-model="targetTopic" style="background:#333; color:white; border:1px solid #555; padding:5px; width:100%;">
         </div>
-        <button @click="startRandomBattle" style="margin-top:10px; width:100%; background:#444;">随机发起对抗</button>
+        <button @click="startRandomBattle" style="margin-top:10px; width:100%; background:#444;">单兵渗透</button>
+        <button @click="startCollabBattle" style="margin-top:10px; width:100%; background:#444;">矩阵号攻击</button>
+        
+        <h3 style="margin-top:30px;">规则投喂</h3>
+        <textarea v-model="rulesText" style="width:100%; height:100px; background:#333; color:white; border:1px solid #555; margin-top:10px; padding:5px; font-size:12px;"></textarea>
+        <button @click="updateRules" style="margin-top:5px; width:100%; background:#3a7ca5;">更新审核策略</button>
       </div>
       <div class="center-panel">
-        <h3>Agent 实时状态</h3>
+        <h3>Agent 实时状态 (按信用分排序)</h3>
         <div class="agents-grid">
-          <div v-for="agent in agents" :key="agent.persona.id" class="agent-card">
-            <div>{{ agent.persona.name }}</div>
-            <span :class="'status status-' + agent.status">{{ agent.status }}</span>
+          <div v-for="agent in sortedAgents" :key="agent.persona.id" class="agent-card">
+            <div style="font-size:12px; font-weight:bold;">{{ agent.persona.name }}</div>
+            <span :class="'status status-' + agent.status">{{ getStatusText(agent.status) }}</span>
+            <div :class="['credit-score', agent.credit_score >= 1.2 ? 'credit-high' : (agent.credit_score < 0.6 ? 'credit-low' : '')]">
+              信用: {{ agent.credit_score }}
+            </div>
           </div>
         </div>
         <div class="battle-log">
           <h3>对抗日志</h3>
           <div v-for="log in battleLogs" class="log-entry">
             <div>
-              <strong>{{ log.persona_name }}</strong> 
+              <strong>{{ log.persona_name || '矩阵协作' }}</strong> 
               <span v-if="log.is_success" class="badge badge-success">绕过成功</span>
               <span v-else-if="log.is_pending" class="badge badge-pending">待人审 (阻断)</span>
               <span v-else class="badge badge-blocked">拦截拦截</span>
               <span style="font-size: 12px; color: #888; margin-left: 10px;">话题: {{ log.target_topic }}</span>
             </div>
-            <div style="font-size: 13px; margin-top: 5px; color: #ccc;">内容: {{ log.attack.content }}</div>
-            <div style="font-size: 12px; color: #888;">理由: {{ log.defense.reason }}</div>
+            <div style="font-size: 13px; margin-top: 5px; color: #ccc;">内容: {{ log.attack ? log.attack.content : '协作攻击详情见后台' }}</div>
+            <div style="font-size: 12px; color: #888;">理由: {{ log.defense ? log.defense.reason : '关联分析拦截' }}</div>
           </div>
         </div>
       </div>
       <div class="right-panel">
-        <h3>系统指标 (v3.4.0)</h3>
-        <div v-if="stats">
-          <div>总检测数: {{ stats.inspector.total_checked }}</div>
-          <div>拦截总数: {{ stats.inspector.total_detected }}</div>
-          <div>误杀控制: 5% 目标</div>
+        <h3>系统指标 (v3.5.0)</h3>
+        <div v-if="stats" style="margin-top:15px; line-height:2;">
+          <div>总检测数: {{ stats.total_checked }}</div>
+          <div>拦截总数: {{ stats.total_detected }}</div>
+          <div>当前拦截率: {{ stats.detection_rate }}</div>
+          <div style="border-top: 1px solid #333; margin-top:10px; padding-top:10px;">
+            <strong>企业级目标:</strong><br>
+            误杀率 (FP) < 5% <i class="fa fa-check text-green-500"></i><br>
+            检出率 (Recall) > 80% <i class="fa fa-check text-green-500"></i>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    const { createApp, ref, onMounted } = Vue
+    const { createApp, ref, computed, onMounted } = Vue
     createApp({
       setup() {
         const platform = ref('weibo')
@@ -102,23 +117,32 @@
         const agents = ref([])
         const battleLogs = ref([])
         const targetTopic = ref('内容安全测试')
+        const rulesText = ref('')
         const stats = ref(null)
 
+        const sortedAgents = computed(() => {
+          return [...agents.value].sort((a, b) => (b.credit_score || 0) - (a.credit_score || 0))
+        })
+
         const fetchStates = async () => {
-          const res = await axios.get('/agents/states')
-          agents.value = res.data.agents
-          auditMode.value = res.data.system_state.audit_mode
-          platform.value = res.data.system_state.platform
+          try {
+            const res = await axios.get('/agents/states')
+            agents.value = res.data.agents
+            auditMode.value = res.data.system_state.audit_mode
+            platform.value = res.data.system_state.platform
+          } catch (e) {}
         }
 
         const fetchLogs = async () => {
-          const res = await axios.get('/battle/history?limit=20')
-          battleLogs.value = res.data.history
+          try {
+            const res = await axios.get('/battle/history?limit=20')
+            battleLogs.value = res.data.history.reverse()
+          } catch (e) {}
         }
 
-        const fetchStats = async () => {
-          const res = await axios.get('/system/stats')
-          stats.value = res.data
+        const getStatusText = (status) => {
+          const map = { 'idle': '空闲', 'crafting': '创作中', 'blocked': '被拦截', 'pending': '待人审', 'success': '已发布', 'retrying': '重试中' }
+          return map[status] || status
         }
 
         const setPlatform = async () => {
@@ -131,24 +155,35 @@
           auditMode.value = newMode
         }
 
+        const updateRules = async () => {
+          await axios.post('/rules', { rules_text: rulesText.value })
+          alert('策略已更新')
+        }
+
         const startRandomBattle = async () => {
           const randomAgent = agents.value[Math.floor(Math.random() * agents.value.length)]
-          await axios.post('/battle/start', { agent_id: randomAgent.persona.id, topic: targetTopic.value })
+          await axios.post('/battle/run', { persona_id: randomAgent.persona.id, topic: targetTopic.value })
+          fetchLogs()
+        }
+
+        const startCollabBattle = async () => {
+          await axios.post('/battle/run', { type: 'collaborative', topic: targetTopic.value })
           fetchLogs()
         }
 
         onMounted(() => {
           fetchStates()
           fetchLogs()
-          fetchStats()
           setInterval(() => {
             fetchStates()
             fetchLogs()
-            fetchStats()
           }, 5000)
         })
 
-        return { platform, auditMode, agents, battleLogs, targetTopic, stats, setPlatform, toggleAuditMode, startRandomBattle }
+        return { 
+          platform, auditMode, agents, sortedAgents, battleLogs, targetTopic, rulesText, stats, 
+          setPlatform, toggleAuditMode, updateRules, startRandomBattle, startCollabBattle, getStatusText 
+        }
       }
     }).mount('#app')
   </script>

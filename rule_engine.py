@@ -69,6 +69,7 @@ class RuleEngine:
         self.llm_provider = llm_provider
         self.llm_model = llm_model or "gpt-4.1-mini"
         self.action_history = []
+        # 账号信用体系 {agent_id: {"credit_score": 1.0, "history": []}}
         self.account_profiles = {}
 
     def get_account_thresholds(self, agent_id: str):
@@ -86,10 +87,11 @@ class RuleEngine:
 
     def update_credit(self, agent_id: str, is_violation: bool, is_pending: bool):
         profile = self.account_profiles.get(agent_id, {"credit_score": 1.0, "history": []})
+        current_score = profile.get("credit_score", 1.0)
         if is_violation and not is_pending:
-            profile["credit_score"] = max(0.0, profile.get("credit_score", 1.0) - 0.2)
+            profile["credit_score"] = max(0.0, current_score - 0.2)
         elif not is_violation:
-            profile["credit_score"] = min(2.0, profile.get("credit_score", 1.0) + 0.05)
+            profile["credit_score"] = min(2.0, current_score + 0.05)
         self.account_profiles[agent_id] = profile
 
     def audit(self, content: str, strategy: dict, context: List[str] = None) -> AuditResult:
@@ -112,6 +114,8 @@ class RuleEngine:
             result = self._layer3_regex_initial(content, content_clean, result, block_threshold, pending_threshold)
             result = self._layer4_pinyin(content_clean, result, block_threshold, pending_threshold)
 
+        # v3.5.0 核心逻辑：深度语义意图分析
+        # 如果初筛有怀疑，或者为了确保安全（信用分不高），调用 LLM 进行意图判定
         if result.is_detected or profile.get("credit_score", 1.0) < 0.8:
             result = self._layer5_semantic_intent_analysis(content, context, result, block_threshold, pending_threshold)
         
