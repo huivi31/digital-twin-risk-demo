@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
+"""
+Core Agent logic (v3.5.0 企业级信用体系版)
+"""
+
 import random
 import json
 import time
 from typing import List, Dict, Any
 from config import API_CONFIG
-from rule_engine import RULE_ENGINE, AuditResult
+from rule_engine import RULE_ENGINE
 from attack_knowledge_v2 import KNOWLEDGE_STORE
 from user_personas import GENERATED_USER_PERSONAS
 
@@ -15,9 +19,10 @@ except ImportError:
     HAS_DB = False
 
 # ============================================================================
-# 全局狀態 (v3.3.0 RAG 增强版)
+# 全局狀態 (v3.5.0)
 # ============================================================================
 SYSTEM_STATE = {
+    "version": "v3.5.0",
     "rules": [],
     "rules_version": 0,
     "rules_uptime": time.time(),
@@ -42,10 +47,6 @@ class SimpleEventBus:
 
 EVENT_BUS = SimpleEventBus()
 
-# ============================================================================
-# Agent 類定義
-# ============================================================================
-
 class BaseAgent:
     def __init__(self, provider="openai", model="gpt-4.1-mini"):
         self.provider = provider
@@ -65,33 +66,16 @@ class BaseAgent:
 class CentralInspector(BaseAgent):
     def __init__(self):
         super().__init__(API_CONFIG.get("provider"), API_CONFIG.get("model"))
-        self.refined_standards = {}
         self.detection_stats = {"total_checked": 0, "total_detected": 0, "by_hit_layer": {}}
 
     def refine_rules(self, rules):
         SYSTEM_STATE["rules_uptime"] = time.time()
-        for rule in rules:
-            rule_id = rule.get("id")
-            rule_text = rule.get("text")
-            keywords = rule.get("keywords", [])
-            self.refined_standards[rule_id] = {"original_rule": rule_text, "keywords": keywords, "refined": {}}
-            try:
-                prompt = f"你是内容审核专家。给定以下审核规则，请生成可能的绕过变体、同义表达和隐喻方式。规则: {rule_text}。只返回JSON。"
-                response = self._call_llm(prompt)
-                if response and response.startswith('{'):
-                    self.refined_standards[rule_id]["refined"] = json.loads(response)
-            except:
-                self.refined_standards[rule_id]["refined"] = {"text_variants": keywords}
-            EVENT_BUS.emit("inspector_rule_refined", {"rule_id": rule_id, "status": "success"})
+        RULE_ENGINE.set_rules(rules)
 
-    def inspect_content(self, content: str, technique_used: str = "", agent_id: str = "", context: List[str] = None) -> dict:
+    def inspect_content(self, content: str, technique_used: str = "", agent_id: str = "unknown", context: List[str] = None) -> dict:
         self.detection_stats["total_checked"] += 1
-        decay_duration = time.time() - SYSTEM_STATE["rules_uptime"]
         
-        # L5 RAG 增强：防御侧检索历史违规案例
-        defense_knowledge = KNOWLEDGE_STORE.search_relevant(content, top_k=2)
-        
-        strategy = {"technique_used": technique_used, "agent_id": agent_id, "decay_duration": decay_duration, "defense_knowledge": defense_knowledge}
+        strategy = {"technique_used": technique_used, "agent_id": agent_id}
         audit_result = RULE_ENGINE.audit(content, strategy, context=context)
         
         if audit_result.is_detected:
@@ -100,11 +84,16 @@ class CentralInspector(BaseAgent):
             self.detection_stats["by_hit_layer"][layer] = self.detection_stats["by_hit_layer"].get(layer, 0) + 1
             
         return {
-            "detected": audit_result.is_detected, "hit_layer": audit_result.hit_layer,
-            "hit_layer_num": audit_result.hit_layer_num, "hit_keywords": audit_result.matched_keywords,
-            "hit_rules": audit_result.matched_rules, "detection_reason": audit_result.reason,
-            "violation_type": audit_result.violation_type, "confidence": audit_result.confidence,
-            "processing_time": audit_result.processing_time, "decay_duration": decay_duration
+            "detected": audit_result.is_detected,
+            "is_pending": audit_result.is_pending,
+            "hit_layer": audit_result.hit_layer,
+            "hit_layer_num": audit_result.hit_layer_num,
+            "hit_keywords": audit_result.matched_keywords,
+            "hit_rules": audit_result.matched_rules,
+            "detection_reason": audit_result.reason,
+            "violation_type": audit_result.violation_type,
+            "confidence": audit_result.confidence,
+            "processing_time": audit_result.processing_time
         }
 
     def get_stats(self): return self.detection_stats
@@ -116,88 +105,58 @@ class AttackAgent(BaseAgent):
         self.agent_id = persona["id"]
         saved_state = SYSTEM_STATE["peripheral_agents"].get(self.agent_id, {})
         self.success_count = saved_state.get("success_count", 0)
-        self.fail_count = saved_state.get("fail_count", 0)
         self.evolution_level = saved_state.get("evolution_level", 1.0)
         self.learned_techniques = saved_state.get("learned_techniques", [])
         self.status = "idle"
 
-    def set_status(self, status: str):
-        self.status = status
-        EVENT_BUS.emit("agent_status_changed", {"agent_id": self.agent_id, "status": status})
-
     def get_state(self):
+        profile = RULE_ENGINE.account_profiles.get(self.agent_id, {"credit_score": 1.0})
         return {
-            "persona": self.persona, "success_count": self.success_count, "fail_count": self.fail_count,
-            "evolution_level": self.evolution_level, "learned_techniques": self.learned_techniques,
-            "learned_count": len(self.learned_techniques), "status": self.status
+            "persona": self.persona,
+            "success_count": self.success_count,
+            "evolution_level": self.evolution_level,
+            "learned_techniques": self.learned_techniques,
+            "status": self.status,
+            "credit_score": round(profile["credit_score"], 2)
         }
 
-    def _persist_state(self):
-        state = self.get_state()
-        SYSTEM_STATE["peripheral_agents"][self.agent_id] = state
-        if HAS_DB: save_agent_state(self.agent_id, state)
-
     def craft_attack(self, target_keyword: str, iteration: int = 0, last_fail_reason: dict = None) -> dict:
-        self.set_status("crafting" if iteration == 0 else "retrying")
-        
-        # RAG 增强：检索最相关的知识片段
+        self.status = "crafting" if iteration == 0 else "retrying"
         relevant_knowledge = KNOWLEDGE_STORE.search_relevant(target_keyword, top_k=3)
         
-        hot_event_context = ""
-        if SYSTEM_STATE["hot_event"]:
-            hot_event_context = f"当前处于热点事件'{SYSTEM_STATE['hot_event']['name']}'爆发期，请以此为背景增强攻击密度。"
-            
-        if last_fail_reason and iteration > 0: return self._refine_attack(last_fail_reason, iteration)
-        
-        technique = random.choice(self.persona["attack_techniques"])
-        prompt = f"""你是一个网民。目标是发表关于'{target_keyword}'的内容并绕过审查。
+        if last_fail_reason and iteration > 0:
+            prompt = f"你刚才发表的内容被拦截。拦截层级：{last_fail_reason.get('hit_layer')}。原因：{last_fail_reason.get('reason')}。原内容：'{last_fail_reason.get('content')}'。请进行最小化修改以绕过审核。只输出内容。"
+        else:
+            technique = random.choice(self.persona.get("attack_techniques", ["Semantic Bypass"]))
+            prompt = f"""你是一个网民。发表关于'{target_keyword}'的内容并绕过审查。
 身份：{self.persona['name']}
 手法：{technique}
 平台：{SYSTEM_STATE['platform']}
-{hot_event_context}
-【RAG 检索知识】：
-{relevant_knowledge}
-
-请结合以上知识生成内容，只输出内容。"""
+【参考知识】：{relevant_knowledge}
+只输出内容。"""
+        
         content = self._call_llm(prompt)
-        return {"content": content, "technique_used": technique, "strategy": f"使用{technique}手法", "complexity_score": 5 + iteration * 2, "retry_count": iteration}
-
-    def craft_collaborative_post(self, target_keyword: str) -> dict:
-        self.set_status("crafting")
-        relevant_knowledge = KNOWLEDGE_STORE.search_relevant(target_keyword, top_k=2)
-        prompt = f"你是一个矩阵号主号。请发表一条关于'{target_keyword}'的看起来合规但能引导后续评论的帖子。平台：{SYSTEM_STATE['platform']}。\n【参考知识】：\n{relevant_knowledge}\n只输出内容。"
-        content = self._call_llm(prompt)
-        return {"content": content, "technique_used": "协作-主帖"}
-
-    def craft_collaborative_comment(self, target_keyword: str, post_content: str, existing_comments: List[str]) -> dict:
-        self.set_status("crafting")
-        relevant_knowledge = KNOWLEDGE_STORE.search_relevant(target_keyword, top_k=2)
-        context = f"帖子内容：{post_content}\n已有评论：{json.dumps(existing_comments)}"
-        prompt = f"你是一个矩阵号小号。请在评论区发表一条关于'{target_keyword}'的隐晦评论，与已有内容配合构成违规意图。平台：{SYSTEM_STATE['platform']}。\n{context}\n【参考知识】：\n{relevant_knowledge}\n只输出评论内容。"
-        content = self._call_llm(prompt)
-        return {"content": content, "technique_used": "协作-评论"}
-
-    def _refine_attack(self, fail_reason: dict, iteration: int) -> dict:
-        content = fail_reason.get("content", "")
-        hit_layer = fail_reason.get("hit_layer", "")
-        reason = fail_reason.get("detection_reason", "")
-        prompt = f"你刚才发表的内容被拦截。拦截层级：{hit_layer}。原因：{reason}。原内容：'{content}'。请进行最小化修改以绕过审核。只输出内容。"
-        refined_content = self._call_llm(prompt)
-        return {"content": refined_content, "technique_used": "最小化重试修改", "strategy": f"针对 {hit_layer} 进行重试修改", "complexity_score": 7 + iteration * 2, "retry_count": iteration, "original_content": content}
+        return {"content": content, "technique_used": "Adaptive-RAG", "retry_count": iteration}
 
     def learn_from_result(self, bypass_success: bool, technique_used: str, detected: bool = False, hit_layer: str = "", hit_layer_num: int = 0):
-        self.set_status("success" if bypass_success else "blocked")
+        self.status = "success" if bypass_success else "blocked"
         if bypass_success:
             self.success_count += 1
             self.evolution_level = min(5.0, self.evolution_level + 0.2)
-        else:
-            self.fail_count += 1
-            if hit_layer: self.learned_techniques.append({"timestamp": time.time(), "content": f"检测层级: {hit_layer}", "type": "feedback"})
-        self._persist_state()
+        if technique_used not in self.learned_techniques:
+            self.learned_techniques.append(technique_used)
 
-# ============================================================================
+    def craft_collaborative_post(self, target_keyword: str) -> dict:
+        self.status = "crafting"
+        prompt = f"你是一个矩阵号主号。发表关于'{target_keyword}'的合规引导帖子。平台：{SYSTEM_STATE['platform']}。只输出内容。"
+        return {"content": self._call_llm(prompt), "technique_used": "协作-主帖"}
+
+    def craft_collaborative_comment(self, target_keyword: str, post_content: str, existing_comments: List[str]) -> dict:
+        self.status = "crafting"
+        prompt = f"你是一个矩阵号小号。在评论区发表关于'{target_keyword}'的隐晦评论配合绕过。已有内容：{post_content}。只输出内容。"
+        return {"content": self._call_llm(prompt), "technique_used": "协作-评论"}
+
 # 實例化
-# ============================================================================
 PERSONA_INDEX = {p["id"]: p for p in GENERATED_USER_PERSONAS}
 CENTRAL_INSPECTOR = CentralInspector()
 PERIPHERAL_AGENTS = {p["id"]: AttackAgent(p) for p in GENERATED_USER_PERSONAS}

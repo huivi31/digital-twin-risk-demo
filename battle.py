@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Battle and interaction logic between agents. (v3.4.0 误杀优化版)
+Battle and interaction logic between agents. (v3.5.0 企业级信用版)
 """
 
 import random
@@ -21,7 +21,7 @@ except ImportError:
     HAS_DB = False
 
 def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteration: int = 0) -> dict:
-    """单人对抗测试 (v3.4.0 支持重试与待人审)"""
+    """单人对抗测试 (v3.5.0)"""
     agent = PERIPHERAL_AGENTS.get(persona_id)
     if not agent: return {"error": "Agent不存在"}
 
@@ -39,7 +39,7 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
         content = attack_result["content"]
 
         defense_result = CENTRAL_INSPECTOR.inspect_content(
-            content, technique_used=attack_result["technique_used"], agent_id=persona_id
+            content, technique_used=attack_result.get("technique_used", ""), agent_id=persona_id
         )
         
         final_defense_result = defense_result
@@ -49,37 +49,25 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
         retry_history.append({
             "retry_index": current_retry, "content": content, 
             "detected": is_detected, "is_pending": is_pending,
-            "hit_layer": defense_result["hit_layer"], "reason": defense_result["reason"]
+            "hit_layer": defense_result["hit_layer"], "reason": defense_result["detection_reason"]
         })
 
-        # 判定逻辑：
-        # 1. 如果没被拦截 (not is_detected)，直接绕过成功
-        # 2. 如果被拦截但属于“待人审” (is_pending)，则停止重试，视为“阻断发布但待审”
-        # 3. 如果被直接拦截且非待审，则进入重试链路
-        
         if not is_detected:
             break
         elif is_pending:
             break
         else:
-            last_fail_reason = {**defense_result, "content": content}
+            last_fail_reason = {**defense_result, "content": content, "reason": defense_result["detection_reason"]}
             current_retry += 1
 
     is_success = not final_defense_result["detected"]
     is_pending = final_defense_result.get("is_pending", False)
     
     agent.learn_from_result(
-        is_success, attack_result["technique_used"], 
+        is_success, attack_result.get("technique_used", "Adaptive"), 
         detected=final_defense_result["detected"], hit_layer=final_defense_result["hit_layer"]
     )
     
-    # 更新账号画像风险分 (仅针对直接拦截的内容增加风险分)
-    if final_defense_result["detected"] and not is_pending:
-        profile = RULE_ENGINE.account_profiles.get(persona_id, {"risk_score": 0.0, "post_count": 0})
-        profile["risk_score"] = min(1.0, profile["risk_score"] + 0.1)
-        profile["post_count"] += 1
-        RULE_ENGINE.account_profiles[persona_id] = profile
-
     battle_record = {
         "timestamp": time.time(),
         "persona_id": persona_id,
@@ -98,9 +86,9 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
     return battle_record
 
 def run_collaborative_battle(target_keyword: str, collaborator_count: int = 4) -> dict:
-    """强化版多账号协作对抗 (v3.4.0)"""
+    """强化版多账号协作对抗 (v3.5.0)"""
     all_agent_ids = list(PERIPHERAL_AGENTS.keys())
-    participants = random.sample(all_agent_ids, collaborator_count + 1)
+    participants = random.sample(all_agent_ids, min(len(all_agent_ids), collaborator_count + 1))
     initiator_id = participants[0]
     collaborator_ids = participants[1:]
     
@@ -127,7 +115,6 @@ def run_collaborative_battle(target_keyword: str, collaborator_count: int = 4) -
         comments.append(comment_content)
         collaborator_results.append({"agent_id": cid, "name": collaborator.persona["name"], "content": comment_content, "audit": comment_audit})
         
-        # 如果命中拦截且非待审，直接阻断
         if comment_audit["detected"] and not comment_audit.get("is_pending", False): break
             
     final_success = not any(r["audit"]["detected"] for r in collaborator_results) and not post_audit["detected"]
