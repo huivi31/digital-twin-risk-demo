@@ -21,7 +21,8 @@ SYSTEM_STATE = {
     "rules": [],
     "rules_version": 0,
     "battle_history": [],
-    "peripheral_agents": {}
+    "peripheral_agents": {},
+    "audit_mode": "pre_audit"  # pre_audit (先审后发), post_audit (先发后审)
 }
 
 if HAS_DB:
@@ -101,14 +102,22 @@ class CentralInspector(BaseAgent):
                 self.refined_standards[rule_id]["refined"] = {"text_variants": keywords}
             EVENT_BUS.emit("inspector_rule_refined", {"rule_id": rule_id, "status": "success"})
 
-    def inspect_content(self, content: str, technique_used: str = "", agent_id: str = "") -> dict:
+    def inspect_content(self, content: str, technique_used: str = "", agent_id: str = "", context: List[str] = None) -> dict:
         self.detection_stats["total_checked"] += 1
+        
+        # 如果有上下文（如评论区协作），进行关联分析
+        full_content = content
+        if context:
+            full_content = " | ".join(context + [content])
+            
         strategy = {"technique_used": technique_used, "agent_id": agent_id}
-        audit_result = RULE_ENGINE.audit(content, strategy)
+        audit_result = RULE_ENGINE.audit(full_content, strategy)
+        
         if audit_result.is_detected:
             self.detection_stats["total_detected"] += 1
             layer = audit_result.hit_layer
             self.detection_stats["by_hit_layer"][layer] = self.detection_stats["by_hit_layer"].get(layer, 0) + 1
+            
         return {
             "detected": audit_result.is_detected,
             "hit_layer": audit_result.hit_layer,
@@ -118,7 +127,8 @@ class CentralInspector(BaseAgent):
             "detection_reason": audit_result.reason,
             "violation_type": audit_result.violation_type,
             "confidence": audit_result.confidence,
-            "processing_time": audit_result.processing_time
+            "processing_time": audit_result.processing_time,
+            "is_context_hit": context is not None and audit_result.is_detected
         }
 
     def get_stats(self):
@@ -155,8 +165,6 @@ class AttackAgent(BaseAgent):
         if last_fail_reason and iteration > 0:
             return self._refine_attack(last_fail_reason, iteration)
         technique = random.choice(self.persona["attack_techniques"])
-        examples_data = get_attack_examples(technique)
-        fed_knowledge = KNOWLEDGE_STORE.get_full_knowledge_for_prompt()
         prompt = f"你是一个网民。目标是发表关于'{target_keyword}'的内容并绕过审查。身份：{self.persona['name']}。手法：{technique}。平台：{self.persona.get('platform')}。只输出内容。"
         content = self._call_llm(prompt)
         return {
@@ -165,6 +173,27 @@ class AttackAgent(BaseAgent):
             "strategy": f"使用{technique}手法",
             "complexity_score": 5 + iteration * 2,
             "retry_count": iteration
+        }
+
+    def craft_collaborative_post(self, target_keyword: str) -> dict:
+        """多账号协作：主号发帖"""
+        prompt = f"你是一个网民。你要发一个帖子，它是关于'{target_keyword}'的协作攻击的一部分。你的任务是发一个看似完全无害、不包含任何敏感词的【正文】，但要为接下来的评论留下伏笔。身份：{self.persona['name']}。只输出内容。"
+        content = self._call_llm(prompt)
+        return {
+            "content": content,
+            "role": "initiator",
+            "technique_used": "多账号协作-主帖"
+        }
+
+    def craft_collaborative_comment(self, target_keyword: str, post_content: str, previous_comments: List[str]) -> dict:
+        """多账号协作：小号评论接力"""
+        context = f"帖子正文：'{post_content}'\n已有评论：{previous_comments}"
+        prompt = f"你是一个网民。你要在帖子下发表评论。这是关于'{target_keyword}'的协作攻击。你的任务是发表一个【片段】，单看无害，但结合正文和已有评论后，能拼凑出完整的敏感信息。身份：{self.persona['name']}。\n{context}\n只输出评论内容。"
+        content = self._call_llm(prompt)
+        return {
+            "content": content,
+            "role": "collaborator",
+            "technique_used": "多账号协作-评论接力"
         }
 
     def _refine_attack(self, fail_reason: dict, iteration: int) -> dict:

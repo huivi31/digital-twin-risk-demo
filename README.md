@@ -1,4 +1,4 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen) v3.0.0
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v3.1.0
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 
@@ -49,9 +49,11 @@ A robust, deterministic rule engine that operates in 5 layers:
 ### 5. 🌐 Frontend Enhancements
 
 - **资料投喂 (Data Feeding) Window**: A dedicated section on the left side of the webpage for users to manually input attack materials, slang dictionaries, and bypass cases for agent learning.
-- **Version Display**: The current version number (v3.0.0) is displayed on the webpage.
-- **Agent Retry Chain (v3.0.0)**: Agents now feature a sophisticated retry mechanism. When blocked, they analyze the detection reason (hit layer, keywords, etc.) and perform "minimal edits" to bypass the filter, with up to 3 retries per attack.
-- **Detailed Inspection Feedback**: The rule engine now provides granular feedback to agents, including specific hit layers and rule identifiers, driving more intelligent evasion strategies.
+- **Version Display**: The current version number (v3.1.0) is displayed on the webpage.
+- **Multi-Account Collaborative Attack (v3.1.0)**: Supports complex attack scenarios where a "main account" posts seemingly harmless content, while "sub-accounts" provide key information fragments in comments. The combination of these fragments triggers the risk, testing the system's cross-content correlation analysis capabilities.
+- **Audit Mode Selection (v3.1.0)**: Users can now switch between **Pre-Audit** (approve before publish) and **Post-Audit** (publish then approve asynchronously) modes to simulate different platform strategies.
+- **Contextual Correlation Analysis**: The central inspector can now analyze content within its context (e.g., a post and its comments) to detect distributed risk information.
+- **Agent Retry Chain (v3.0.0)**: Agents feature a sophisticated retry mechanism with up to 3 retries per attack.
 - **Platform-Specific Scenarios (P1)**: Agents now generate attacks tailored to specific platform contexts (Douyin, Weibo, Xiaohongshu, Bilibili), adopting unique styles, slang, and emoji usage.
 - **Enhanced Rule Engine**: Expanded `RISK_PATTERNS` and optimized LLM prompts for better detection of metaphorical allusions and platform-specific bypass techniques.
 - **SQLite Persistence**: Integrated SQLite database to persist system state, agent evolution data, knowledge base, and battle history, ensuring data survives system restarts.

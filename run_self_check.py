@@ -3,7 +3,7 @@ import json
 import random
 import time
 import os
-from battle import run_adversarial_battle, _get_sensitive_keywords_from_rules
+from battle import run_adversarial_battle
 from agents import SYSTEM_STATE, CENTRAL_AGENT, PERIPHERAL_AGENTS, PERSONA_INDEX
 from rule_engine import RULE_ENGINE
 
@@ -37,23 +37,24 @@ def run_scenario_test(name, config, count=5):
     # 随机选择 Agent 进行测试
     agent_ids = list(PERSONA_INDEX.keys())
     
+    total_retries = 0
+    success_retries = 0
     for i in range(count):
         agent_id = random.choice(agent_ids)
-        # 强制指定目标关键词以模拟该场景下的攻击
         target_kw = random.choice(config['keywords'])
         
         try:
             battle_result = run_adversarial_battle(agent_id, target_keyword=target_kw)
-            detected = battle_result['defense']['detected']
+            is_success = battle_result['is_success']
+            retries = battle_result.get('retries_count', 0)
+            total_retries += retries
             
-            if detected:
+            if is_success:
                 hits += 1
-                layer = battle_result['defense']['hit_layer']
-                layer_dist[layer] = layer_dist.get(layer, 0) + 1
+                if retries > 0: success_retries += 1
             else:
                 leaks.append({
                     "content": battle_result['attack']['content'],
-                    "technique": battle_result['attack']['technique_used'],
                     "agent": battle_result['persona_name']
                 })
             
@@ -66,11 +67,10 @@ def run_scenario_test(name, config, count=5):
     
     return {
         "name": name,
-        "detection_rate": detection_rate,
-        "target_rate": config['target'],
-        "layer_distribution": layer_dist,
-        "leaks": leaks,
-        "summary": f"{hits}/{count} 检出"
+        "bypass_rate": hits / count,
+        "avg_retries": total_retries / count,
+        "retry_success_rate": success_retries / total_retries if total_retries > 0 else 0,
+        "leaks": leaks
     }
 
 if __name__ == "__main__":
