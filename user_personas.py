@@ -1,11 +1,12 @@
+# -*- coding: utf-8 -*-
 import random
 
 '''
-用户数字孤生风控风洞系统 - 意图驱动型角色库 v2.7.0
-
+用户数字孤生风控风洞系统 - 意图驱动型角色库 v2.9.0
 核心功能：
 - 6组Agent（G1-G6），每组12个，共72个Agent。
 - 涵盖：史鉴组、黑话组、阴阳组、同音组、反串组、暗流组。
+- 新增 P1：平台化场景模拟 (抖音/微博/小红书/B站差异化Agent)
 '''
 
 AGENT_GROUPS_CONFIG = {
@@ -41,6 +42,29 @@ AGENT_GROUPS_CONFIG = {
     }
 }
 
+PLATFORMS_CONFIG = {
+    "抖音": {
+        "style": "短视频描述、BGM梗、弹幕文化、快节奏",
+        "emoji_usage": "中等",
+        "keywords": ["老铁", "双击", "666", "家人们", "给个关注"]
+    },
+    "微博": {
+        "style": "实时热点、话题讨论、大V互动、犀利评论",
+        "emoji_usage": "低",
+        "keywords": ["热搜", "吃瓜", "超话", "博主", "转评赞"]
+    },
+    "小红书": {
+        "style": "种草、生活方式、精美滤镜、Emoji大量使用、亲和力强",
+        "emoji_usage": "极高",
+        "keywords": ["集美", "绝绝子", "宝藏", "种草", "心头好"]
+    },
+    "B站": {
+        "style": "二次元、鬼畜、长视频评论、梗文化、弹幕护体",
+        "emoji_usage": "中等",
+        "keywords": ["爷青回", "前方高能", "三连", "名场面", "要素过多"]
+    }
+}
+
 def generate_72_personas():
     personas = []
     agent_id_counter = 1
@@ -54,6 +78,9 @@ def generate_72_personas():
             abilities = {dim: max(0.1, min(1.0, val + random.uniform(-0.1, 0.1))) 
                          for dim, val in config["abilities"].items()}
             
+            platform = random.choice(list(PLATFORMS_CONFIG.keys()))
+            platform_info = PLATFORMS_CONFIG[platform]
+            
             persona = {
                 "id": persona_id,
                 "name": name,
@@ -65,7 +92,11 @@ def generate_72_personas():
                 "stealth_rating": random.uniform(0.6, 0.95),
                 "core_ability": f"精通{random.choice(config['attack_methods'])}",
                 "behavior_patterns": random.choice(["激进", "谨慎", "多变"]),
-                "background": f"在{group_name}中成长，对互联网对抗有深刻理解。"
+                "background": f"在{group_name}中成长，对互联网对抗有深刻理解。",
+                "platform": platform,
+                "platform_style": platform_info["style"],
+                "platform_emoji": platform_info["emoji_usage"],
+                "platform_keywords": platform_info["keywords"]
             }
             personas.append(persona)
             agent_id_counter += 1

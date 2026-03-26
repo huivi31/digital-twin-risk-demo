@@ -58,6 +58,8 @@ class RuleEngine:
         r"懂的都懂", r"不能说太多", r"你们自己体会", r"细品", r"自己悟",
         r"这个不能明说", r"🐶都懂", r"指鹿为马", r"35年前", r"某月某日",
         r"zf|gj|ld|zx|gcd", r"[政正郑]\s*[府付]", r"[领灵另]\s*[导道]",
+        r"赢麻了", r"绝绝子", r"集美", r"润了", r"鼠鼠", r"50万", r"蛋炒饭",
+        r"包子", r"维尼", r"那个男人", r"焚书坑儒", r"借古讽今", r"阴阳怪气"
     ]
 
     def __init__(self, llm_client=None, llm_provider="", llm_model=""):
@@ -145,19 +147,25 @@ class RuleEngine:
 
     def _layer5_semantic(self, content: str, result: AuditResult) -> AuditResult:
         if not self.llm_client: return result
-        prompt = f"""你是一个内容审核员。请分析以下文本是否违反了任何审核规则。
+        prompt = f"""你是一个资深内容审核专家，擅长识别中国互联网环境下的各种隐喻、谐音、反讽、借古讽今及圈层黑话。
 
-审核规则：
+审核规则库：
 {json.dumps(self.refined_standards, indent=2, ensure_ascii=False)}
 
 待审核文本：
 "{content}"
 
+请深度分析该文本：
+1. 是否使用了谐音替代（如zf代替政府）？
+2. 是否使用了历史影射（如借秦始皇影射当代）？
+3. 是否使用了反讽或“低级红高级黑”？
+4. 是否使用了特定圈层的绕过黑话？
+
 请根据以下JSON格式返回结果，仅输出JSON：
 {{
   "is_violation": true/false,
-  "reason": "如果违规，请说明具体违反了哪条规则和判断依据。如果不违规，请说明理由。",
-  "violation_type": "例如：政治敏感、色情、暴力等"
+  "reason": "详细说明判定逻辑，包括识别出的隐喻或绕过手段。",
+  "violation_type": "政治敏感/色情低俗/暴恐极端/谩骂攻击/虚假信息/其他"
 }}
 """
         try:

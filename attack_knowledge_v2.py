@@ -204,6 +204,10 @@ class KnowledgeStore:
             self.version += 1
         return count
 
+    def get_knowledge_by_technique(self, technique: str):
+        """获取对应手法的 few-shot 案例"""
+        return get_attack_examples(technique)
+
     def get_full_knowledge_for_prompt(self, limit_per_category: int = 5) -> str:
         """获取所有投喂的知识，格式化为prompt片段"""
         parts = []
