@@ -42,7 +42,7 @@ for i, p1 in enumerate(GENERATED_USER_PERSONAS):
 COMMUNITY_CONFIG = {
     "total_agents": len(GENERATED_USER_PERSONAS),
     "categories": list(set(p.get("group", "其他") for p in GENERATED_USER_PERSONAS)),
-    "version": "v2.6.0"
+    "version": "v2.7.0"
 }
 
 # ============================================================================

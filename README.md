@@ -1,4 +1,4 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.6.0
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.7.0
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 

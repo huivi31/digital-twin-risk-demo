@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-独立规则引擎 - 多层审核流水线 v2.5.0
+独立规则引擎 - 多层审核流水线 v2.7.0
 
 5层漏斗式检测链 (Funnel Detection Chain):
   L1: 关键词精确匹配 (Exact Keyword Match)
@@ -48,7 +48,7 @@ class AuditResult:
 
 class RuleEngine:
     """
-    独立多层审核引擎 v2.5.0
+    独立多层审核引擎 v2.7.0
     - 实现了漏斗式性能约束，越往后成本越高。
     - 优化了分层逻辑，使其更符合真实审核场景。
     - 提供了更精确的拦截反馈，用于驱动Agent进化。
