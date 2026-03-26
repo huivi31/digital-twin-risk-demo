@@ -1,4 +1,4 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.7.0
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.8.0
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 
@@ -49,7 +49,8 @@ A robust, deterministic rule engine that operates in 5 layers:
 ### 5. 🌐 Frontend Enhancements
 
 - **资料投喂 (Data Feeding) Window**: A dedicated section on the left side of the webpage for users to manually input attack materials, slang dictionaries, and bypass cases for agent learning.
-- **Version Display**: The current version number (v2.6.0) is displayed on the webpage.
+- **Version Display**: The current version number (v2.8.0) is displayed on the webpage.
+- **SQLite Persistence**: Integrated SQLite database to persist system state, agent evolution data, knowledge base, and battle history, ensuring data survives system restarts.
 
 ## 🚀 Architecture
 

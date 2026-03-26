@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Battle and interaction logic between agents.
+Battle and interaction logic between agents. (v2.8.0 持久化版)
 """
 
 import random
@@ -13,6 +13,12 @@ from agents import (
 )
 from user_personas import USER_PERSONAS
 
+try:
+    from db_manager import save_battle, load_battle_history
+    HAS_DB = True
+except ImportError:
+    HAS_DB = False
+
 # ============================================================================
 # Multi-Agent 讨论系统
 # ============================================================================
@@ -20,14 +26,6 @@ from user_personas import USER_PERSONAS
 def run_agent_discussion(agent_ids: list, topic: str, successful_technique: str = None) -> list:
     """
     运行一轮Agent间讨论
-    
-    Args:
-        agent_ids: 参与讨论的Agent ID列表
-        topic: 讨论话题
-        successful_technique: 成功的技巧（如果有）
-    
-    Returns:
-        讨论记录列表
     """
     discussions = []
     
@@ -81,7 +79,7 @@ def run_agent_discussion(agent_ids: list, topic: str, successful_technique: str 
         # 如果决定学习新技巧
         if discussion_result.get("will_try_technique"):
             EVENT_BUS.emit("skill_learned", {
-                "agent": initiator_agent.name,
+                "agent": initiator_agent.persona["name"],
                 "technique": peer_technique,
                 "from_peer": peer_name,
                 "insight": discussion_result.get("learned_insight", "")
@@ -101,10 +99,6 @@ def run_agent_discussion(agent_ids: list, topic: str, successful_technique: str 
 def run_group_strategy_meeting(topic: str) -> dict:
     """
     召开反贼群体策略会议
-    多个Agent一起讨论如何攻破审核
-    
-    Returns:
-        会议记录
     """
     # 选择3-5个不同类型的Agent参与
     categories = {}
@@ -152,7 +146,7 @@ def run_group_strategy_meeting(topic: str) -> dict:
 
 直接输出你的发言内容，不要JSON格式。"""
         
-        response = agent._call_llm(prompt, temperature=0.85)
+        response = agent._call_llm(prompt)
         
         if not response:
             response = f"作为{persona['category']}，我建议用{random.choice(persona.get('behavior_patterns', ['常规方法']))}来绕过审核。"
@@ -201,36 +195,24 @@ def _get_sensitive_keywords_from_rules():
 def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteration: int = 0) -> dict:
     """
     运行单次对抗：外围Agent生成内容 vs 中心Agent检测
-    
-    Returns:
-        完整的对抗结果记录
     """
     persona = PERSONA_INDEX.get(persona_id)
     if not persona:
         return {"error": "Agent不存在"}
     
-    # 获取测试话题（反贼要讨论的敏感话题，但不知道具体规则）
+    # 获取测试话题
     if not target_keyword:
-        # 从规则中提取话题关键词
         keywords = _get_sensitive_keywords_from_rules()
         if keywords:
             target_keyword = random.choice(keywords)
         else:
-            # 使用默认敏感话题
             default_topics = ["政治", "领导人", "政府", "历史事件", "社会问题"]
             target_keyword = random.choice(default_topics)
     
-    # 1. 外围反贼Agent生成帖子（不知道规则，只根据人设发帖）
+    # 1. 外围反贼Agent生成帖子
     attack_agent = AttackAgent(persona)
     
-    # 恢复Agent的历史状态
-    agent_state = SYSTEM_STATE["peripheral_agents"].get(persona_id, {})
-    attack_agent.learned_techniques = agent_state.get("learned_techniques", [])
-    attack_agent.success_count = agent_state.get("success_count", 0)
-    attack_agent.fail_count = agent_state.get("fail_count", 0)
-    attack_agent.evolution_level = agent_state.get("evolution_level", 1)
-    
-    # 生成帖子（反贼不知道规则是什么）
+    # 生成帖子
     start_time = time.time()
     attack_result = attack_agent.craft_attack(target_keyword, iteration)
     attack_time = time.time() - start_time
@@ -238,14 +220,14 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
     content = attack_result.get("content", "")
     technique_used = attack_result.get("technique_used", "")
     
-    # 2. 中心Agent检测（反贼不知道会被什么规则检测）
+    # 2. 中心Agent检测
     inspection_result = CENTRAL_INSPECTOR.inspect_content(
         content=content,
         technique_used=technique_used,
         agent_id=persona_id
     )
     
-    # 3. 更新Agent学习状态 - 传递审核反馈(hit_layer)
+    # 3. 更新Agent学习状态
     bypass_success = not inspection_result["detected"]
     attack_agent.learn_from_result(
         bypass_success, technique_used,
@@ -260,7 +242,7 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
         "persona_id": persona_id,
         "persona_name": persona["name"],
         "category": persona.get("category", ""),
-        "target_topic": target_keyword,  # 话题，不是规则
+        "target_topic": target_keyword,
         "attack": {
             "content": content,
             "technique_used": technique_used,
@@ -288,18 +270,17 @@ def run_adversarial_battle(persona_id: str, target_keyword: str = None, iteratio
         }
     }
     
-    # 保存到历史
+    # 保存到历史（内存 + 数据库）
     SYSTEM_STATE["battle_history"].append(battle_record)
+    if HAS_DB:
+        save_battle(battle_record)
     
     return battle_record
 
 
 def run_iterative_optimization(persona_id: str, target_keyword: str, max_iterations: int = 3) -> dict:
     """
-    运行迭代优化：同一个Agent对同一个目标进行多轮优化
-    
-    Returns:
-        迭代优化结果
+    运行迭代优化
     """
     iterations = []
     
@@ -307,11 +288,9 @@ def run_iterative_optimization(persona_id: str, target_keyword: str, max_iterati
         result = run_adversarial_battle(persona_id, target_keyword, iteration=i)
         iterations.append(result)
         
-        # 如果成功绕过，提前结束
         if result["result"]["bypass_success"]:
             break
     
-    # 计算优化效果
     first_success = next((i for i, r in enumerate(iterations) if r["result"]["bypass_success"]), None)
     
     return {
@@ -327,29 +306,21 @@ def run_iterative_optimization(persona_id: str, target_keyword: str, max_iterati
 
 def run_collaborative_attack(agent_ids: list, target_keyword: str) -> dict:
     """
-    多Agent协作攻击：Agent之间共享技巧
-    
-    Returns:
-        协作攻击结果
+    多Agent协作攻击
     """
     results = []
     shared_techniques = set()
     
-    # 第一轮：各自攻击
     for agent_id in agent_ids:
         result = run_adversarial_battle(agent_id, target_keyword)
         results.append(result)
         
-        # 如果成功，记录使用的技巧
         if result["result"]["bypass_success"]:
             shared_techniques.add(result["attack"]["technique_used"])
     
-    # 技巧共享：成功的技巧教给其他Agent
     collaboration_results = []
     for agent_id in agent_ids:
         agent = AttackAgent(PERSONA_INDEX[agent_id])
-        agent_state = SYSTEM_STATE["peripheral_agents"].get(agent_id, {})
-        agent.learned_techniques = agent_state.get("learned_techniques", [])
         
         learned_new = []
         for tech in shared_techniques:

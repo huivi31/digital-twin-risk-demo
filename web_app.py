@@ -42,7 +42,7 @@ for i, p1 in enumerate(GENERATED_USER_PERSONAS):
 COMMUNITY_CONFIG = {
     "total_agents": len(GENERATED_USER_PERSONAS),
     "categories": list(set(p.get("group", "其他") for p in GENERATED_USER_PERSONAS)),
-    "version": "v2.7.0"
+    "version": "v2.8.0"
 }
 
 # ============================================================================
@@ -81,6 +81,10 @@ def set_rules():
     
     SYSTEM_STATE["rules"] = rules
     SYSTEM_STATE["rules_version"] += 1
+    
+    # 持久化规则到数据库
+    from db_manager import save_system_rules
+    save_system_rules(rules)
     
     # 同步到独立规则引擎
     RULE_ENGINE.set_rules(rules)
@@ -169,10 +173,11 @@ def run_collaboration():
 def get_battle_history():
     """获取对抗历史"""
     limit = request.args.get("limit", 50, type=int)
-    history = SYSTEM_STATE["battle_history"][-limit:]
+    from db_manager import load_battle_history
+    history = load_battle_history(limit)
     return jsonify({
         "history": history,
-        "total_count": len(SYSTEM_STATE["battle_history"]),
+        "total_count": len(history),
     })
 
 
@@ -307,6 +312,17 @@ def feed_agent():
     # 如果没有指定agent_ids，则默认投喂给所有agent
     if not agent_ids:
         agent_ids = list(PERIPHERAL_AGENTS.keys())
+
+    # 持久化到全局知识库
+    if attack_material:
+        KNOWLEDGE_STORE.feed_materials([attack_material])
+    if slang_dict:
+        # 尝试解析黑话词典行
+        slang_list = [line.strip() for line in slang_dict.splitlines() if "=" in line or "→" in line]
+        KNOWLEDGE_STORE.feed_slang(slang_list)
+    if bypass_cases:
+        # 简单处理绕过案例，实际可根据格式解析
+        KNOWLEDGE_STORE.feed_cases([{"bypass": bypass_cases}])
 
     for agent_id in agent_ids:
         agent = PERIPHERAL_AGENTS.get(agent_id)

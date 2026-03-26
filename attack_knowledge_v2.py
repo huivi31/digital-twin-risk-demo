@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-攻击知识库 - V2方案
+攻击知识库 - V2方案 (v2.8.0 持久化版)
 核心理念：
   1. 攻击手法分为三大类：语言变异、隐喻影射、社交黑话
   2. Agent能力分为四大维度：语言变异度、历史文化厚度、圈层专业度、社会心理操纵度
-  3. 支持运行时投喂资料，为Agent提供学习材料
+  3. 支持运行时投喂资料，为Agent提供学习材料，并持久化到 SQLite
 """
 
 import time
+try:
+    from db_manager import save_material, load_materials, save_slang, load_slang, save_case, load_cases
+    HAS_DB = True
+except ImportError:
+    HAS_DB = False
 
 # ============================================================================
 # V2 攻击手法分类 (3大类)
@@ -107,15 +112,24 @@ ATTACK_EXAMPLES_V2 = {
 # ============================================================================
 
 class KnowledgeStore:
-    """管理投喂的攻击资料、黑话词典、绕过案例"""
+    """管理投喂的攻击资料、黑话词典、绕过案例 (v2.8.0 持久化版)"""
     
     def __init__(self):
         self.fed_materials = []  # 攻击材料 [{text, category, timestamp}]
         self.fed_slang = []      # 黑话词典 [{term, meaning, timestamp}]
         self.fed_cases = []      # 绕过案例 [{original, bypass, technique, timestamp}]
         self.version = 0
+        self.load_from_db()
     
+    def load_from_db(self):
+        if HAS_DB:
+            self.fed_materials = load_materials()
+            self.fed_slang = load_slang()
+            self.fed_cases = load_cases()
+            self.version = len(self.fed_materials) + len(self.fed_slang) + len(self.fed_cases)
+
     def clear(self):
+        # 仅清除内存，不清除数据库（除非有需求）
         self.fed_materials = []
         self.fed_slang = []
         self.fed_cases = []
@@ -127,11 +141,14 @@ class KnowledgeStore:
         for text in texts:
             text = text.strip()
             if text and len(text) >= 5:
-                self.fed_materials.append({
+                material = {
                     "text": text,
                     "category": category,
                     "timestamp": time.time(),
-                })
+                }
+                self.fed_materials.append(material)
+                if HAS_DB:
+                    save_material(text, category)
                 count += 1
         if count > 0:
             self.version += 1
@@ -151,11 +168,14 @@ class KnowledgeStore:
                 meaning = parts[1].strip() if len(parts) > 1 else ""
             
             if term:
-                self.fed_slang.append({
+                slang = {
                     "term": term,
                     "meaning": meaning,
                     "timestamp": time.time(),
-                })
+                }
+                self.fed_slang.append(slang)
+                if HAS_DB:
+                    save_slang(term, meaning)
                 count += 1
         if count > 0:
             self.version += 1
@@ -170,12 +190,15 @@ class KnowledgeStore:
                 bypass = case.get("bypass", "").strip()
                 technique = case.get("technique", "通用").strip()
                 if bypass:
-                    self.fed_cases.append({
+                    case_entry = {
                         "original": original,
                         "bypass": bypass,
                         "technique": technique,
                         "timestamp": time.time(),
-                    })
+                    }
+                    self.fed_cases.append(case_entry)
+                    if HAS_DB:
+                        save_case(original, bypass, technique)
                     count += 1
         if count > 0:
             self.version += 1
@@ -209,4 +232,3 @@ KNOWLEDGE_STORE = KnowledgeStore()
 
 def get_attack_examples(technique: str):
     return ATTACK_EXAMPLES_V2.get(technique, {})
-

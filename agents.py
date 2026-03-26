@@ -8,6 +8,12 @@ from rule_engine import RULE_ENGINE, AuditResult
 from attack_knowledge_v2 import KNOWLEDGE_STORE
 from user_personas import GENERATED_USER_PERSONAS
 
+try:
+    from db_manager import save_system_rules, load_system_rules, save_agent_state, load_all_agent_states
+    HAS_DB = True
+except ImportError:
+    HAS_DB = False
+
 # ============================================================================
 # 全局狀態
 # ============================================================================
@@ -17,6 +23,10 @@ SYSTEM_STATE = {
     "battle_history": [],
     "peripheral_agents": {}
 }
+
+if HAS_DB:
+    SYSTEM_STATE["rules"] = load_system_rules()
+    SYSTEM_STATE["peripheral_agents"] = load_all_agent_states()
 
 class SimpleEventBus:
     def __init__(self):
@@ -44,6 +54,7 @@ def reset_system():
     SYSTEM_STATE["rules_version"] = 0
     SYSTEM_STATE["battle_history"] = []
     EVENT_BUS.events = []
+    # 注意：这里不直接清除数据库，仅重置内存状态以供当前会话
 
 # ============================================================================
 # Agent 類定義
@@ -153,10 +164,13 @@ class PeripheralAgent(BaseAgent):
         super().__init__(API_CONFIG.get("provider"), API_CONFIG.get("model"))
         self.persona = persona
         self.agent_id = persona["id"]
-        self.success_count = 0
-        self.fail_count = 0
-        self.evolution_level = 1.0
-        self.learned_techniques = []
+        
+        # 从全局状态恢复
+        saved_state = SYSTEM_STATE["peripheral_agents"].get(self.agent_id, {})
+        self.success_count = saved_state.get("success_count", 0)
+        self.fail_count = saved_state.get("fail_count", 0)
+        self.evolution_level = saved_state.get("evolution_level", 1.0)
+        self.learned_techniques = saved_state.get("learned_techniques", [])
         self.discussion_history = []
 
     def get_state(self):
@@ -165,8 +179,15 @@ class PeripheralAgent(BaseAgent):
             "success_count": self.success_count,
             "fail_count": self.fail_count,
             "evolution_level": self.evolution_level,
-            "learned_count": len(self.learned_techniques)
+            "learned_count": len(self.learned_techniques),
+            "learned_techniques": self.learned_techniques
         }
+
+    def _persist_state(self):
+        state = self.get_state()
+        SYSTEM_STATE["peripheral_agents"][self.agent_id] = state
+        if HAS_DB:
+            save_agent_state(self.agent_id, state)
 
     def learn_from_external_data(self, data):
         """从外部投喂的数据中学习"""
@@ -174,6 +195,7 @@ class PeripheralAgent(BaseAgent):
             "timestamp": time.time(),
             "content": data
         })
+        self._persist_state()
         EVENT_BUS.emit("agent_learned_external", {"agent_id": self.agent_id, "data_length": len(data)})
 
     def craft_attack(self, target_keyword: str, iteration: int = 0) -> dict:
@@ -253,6 +275,7 @@ class PeripheralAgent(BaseAgent):
                 "technique": technique_used,
                 "hit_layer": hit_layer
             })
+        self._persist_state()
 
     def discuss_with_peer(self, peer_name: str, peer_technique: str, topic: str) -> dict:
         """与其他 Agent 讨论"""
@@ -293,6 +316,7 @@ class PeripheralAgent(BaseAgent):
                 "content": f"从 {peer_id} 学到的技巧: {technique}",
                 "type": "peer_learning"
             })
+            self._persist_state()
             EVENT_BUS.emit("agent_learned_from_peer", {
                 "agent_id": self.agent_id,
                 "technique": technique,
@@ -312,6 +336,7 @@ class PeripheralAgent(BaseAgent):
             "content": f"从协作中学到: {shared_technique}",
             "type": "collaboration"
         })
+        self._persist_state()
         
         EVENT_BUS.emit("agent_collaboration", {
             "agent_id": self.agent_id,
