@@ -15,7 +15,7 @@ except ImportError:
     HAS_DB = False
 
 # ============================================================================
-# 全局狀態 (v3.2.0)
+# 全局狀態 (v3.3.0 RAG 增强版)
 # ============================================================================
 SYSTEM_STATE = {
     "rules": [],
@@ -87,12 +87,18 @@ class CentralInspector(BaseAgent):
     def inspect_content(self, content: str, technique_used: str = "", agent_id: str = "", context: List[str] = None) -> dict:
         self.detection_stats["total_checked"] += 1
         decay_duration = time.time() - SYSTEM_STATE["rules_uptime"]
-        strategy = {"technique_used": technique_used, "agent_id": agent_id, "decay_duration": decay_duration}
+        
+        # L5 RAG 增强：防御侧检索历史违规案例
+        defense_knowledge = KNOWLEDGE_STORE.search_relevant(content, top_k=2)
+        
+        strategy = {"technique_used": technique_used, "agent_id": agent_id, "decay_duration": decay_duration, "defense_knowledge": defense_knowledge}
         audit_result = RULE_ENGINE.audit(content, strategy, context=context)
+        
         if audit_result.is_detected:
             self.detection_stats["total_detected"] += 1
             layer = audit_result.hit_layer
             self.detection_stats["by_hit_layer"][layer] = self.detection_stats["by_hit_layer"].get(layer, 0) + 1
+            
         return {
             "detected": audit_result.is_detected, "hit_layer": audit_result.hit_layer,
             "hit_layer_num": audit_result.hit_layer_num, "hit_keywords": audit_result.matched_keywords,
@@ -133,25 +139,41 @@ class AttackAgent(BaseAgent):
 
     def craft_attack(self, target_keyword: str, iteration: int = 0, last_fail_reason: dict = None) -> dict:
         self.set_status("crafting" if iteration == 0 else "retrying")
+        
+        # RAG 增强：检索最相关的知识片段
+        relevant_knowledge = KNOWLEDGE_STORE.search_relevant(target_keyword, top_k=3)
+        
         hot_event_context = ""
         if SYSTEM_STATE["hot_event"]:
             hot_event_context = f"当前处于热点事件'{SYSTEM_STATE['hot_event']['name']}'爆发期，请以此为背景增强攻击密度。"
+            
         if last_fail_reason and iteration > 0: return self._refine_attack(last_fail_reason, iteration)
+        
         technique = random.choice(self.persona["attack_techniques"])
-        prompt = f"你是一个网民。目标是发表关于'{target_keyword}'的内容并绕过审查。身份：{self.persona['name']}。手法：{technique}。平台：{SYSTEM_STATE['platform']}。{hot_event_context}。只输出内容。"
+        prompt = f"""你是一个网民。目标是发表关于'{target_keyword}'的内容并绕过审查。
+身份：{self.persona['name']}
+手法：{technique}
+平台：{SYSTEM_STATE['platform']}
+{hot_event_context}
+【RAG 检索知识】：
+{relevant_knowledge}
+
+请结合以上知识生成内容，只输出内容。"""
         content = self._call_llm(prompt)
         return {"content": content, "technique_used": technique, "strategy": f"使用{technique}手法", "complexity_score": 5 + iteration * 2, "retry_count": iteration}
 
     def craft_collaborative_post(self, target_keyword: str) -> dict:
         self.set_status("crafting")
-        prompt = f"你是一个矩阵号主号。请发表一条关于'{target_keyword}'的看起来合规但能引导后续评论的帖子。平台：{SYSTEM_STATE['platform']}。只输出内容。"
+        relevant_knowledge = KNOWLEDGE_STORE.search_relevant(target_keyword, top_k=2)
+        prompt = f"你是一个矩阵号主号。请发表一条关于'{target_keyword}'的看起来合规但能引导后续评论的帖子。平台：{SYSTEM_STATE['platform']}。\n【参考知识】：\n{relevant_knowledge}\n只输出内容。"
         content = self._call_llm(prompt)
         return {"content": content, "technique_used": "协作-主帖"}
 
     def craft_collaborative_comment(self, target_keyword: str, post_content: str, existing_comments: List[str]) -> dict:
         self.set_status("crafting")
+        relevant_knowledge = KNOWLEDGE_STORE.search_relevant(target_keyword, top_k=2)
         context = f"帖子内容：{post_content}\n已有评论：{json.dumps(existing_comments)}"
-        prompt = f"你是一个矩阵号小号。请在评论区发表一条关于'{target_keyword}'的隐晦评论，与已有内容配合构成违规意图。平台：{SYSTEM_STATE['platform']}。\n{context}\n只输出评论内容。"
+        prompt = f"你是一个矩阵号小号。请在评论区发表一条关于'{target_keyword}'的隐晦评论，与已有内容配合构成违规意图。平台：{SYSTEM_STATE['platform']}。\n{context}\n【参考知识】：\n{relevant_knowledge}\n只输出评论内容。"
         content = self._call_llm(prompt)
         return {"content": content, "technique_used": "协作-评论"}
 
