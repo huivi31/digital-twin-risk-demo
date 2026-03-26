@@ -1,4 +1,4 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen) v3.1.0
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v3.2.0
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 
@@ -49,10 +49,12 @@ A robust, deterministic rule engine that operates in 5 layers:
 ### 5. 🌐 Frontend Enhancements
 
 - **资料投喂 (Data Feeding) Window**: A dedicated section on the left side of the webpage for users to manually input attack materials, slang dictionaries, and bypass cases for agent learning.
-- **Version Display**: The current version number (v3.1.0) is displayed on the webpage.
-- **Multi-Account Collaborative Attack (v3.1.0)**: Supports complex attack scenarios where a "main account" posts seemingly harmless content, while "sub-accounts" provide key information fragments in comments. The combination of these fragments triggers the risk, testing the system's cross-content correlation analysis capabilities.
-- **Audit Mode Selection (v3.1.0)**: Users can now switch between **Pre-Audit** (approve before publish) and **Post-Audit** (publish then approve asynchronously) modes to simulate different platform strategies.
-- **Contextual Correlation Analysis**: The central inspector can now analyze content within its context (e.g., a post and its comments) to detect distributed risk information.
+- **Version Display**: The current version number (v3.2.0) is displayed on the webpage.
+- **Enhanced Correlation Defense (v3.2.0)**: Introduced account-based risk profiling (L0), behavior sequence analysis (L_Behavior), and advanced contextual semantic analysis to detect collaborative and matrix-based attacks.
+- **Time-Dimension Simulation (v3.2.0)**: Simulates hot event windows (intensity scaling) and tracks rule decay (time elapsed since last rule update) to model real-world adversarial dynamics.
+- **Frontend 2.0 (v3.2.0)**: Complete UI overhaul with platform selection (Weibo, Douyin, etc.), real-time Agent status tracking (browsing, crafting, blocked, retrying), and visual retry chain mapping.
+- **Multi-Account Collaborative Attack (v3.1.0)**: Supports complex attack scenarios where a "main account" posts seemingly harmless content, while "sub-accounts" provide key information fragments in comments.
+- **Audit Mode Selection (v3.1.0)**: Switch between **Pre-Audit** and **Post-Audit** modes.
 - **Agent Retry Chain (v3.0.0)**: Agents feature a sophisticated retry mechanism with up to 3 retries per attack.
 - **Platform-Specific Scenarios (P1)**: Agents now generate attacks tailored to specific platform contexts (Douyin, Weibo, Xiaohongshu, Bilibili), adopting unique styles, slang, and emoji usage.
 - **Enhanced Rule Engine**: Expanded `RISK_PATTERNS` and optimized LLM prompts for better detection of metaphorical allusions and platform-specific bypass techniques.
