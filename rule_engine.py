@@ -30,16 +30,18 @@ class AuditResult:
     hit_layer_num: int = 0
     matched_rules: list = field(default_factory=list)
     matched_keywords: list = field(default_factory=list)
+    violation_type: str = "其他"
     confidence: float = 0.0
     processing_time: float = 0.0
 
-    def block(self, layer: str, layer_num: int, reason: str, confidence: float, keywords: list = None, rules: list = None):
+    def block(self, layer: str, layer_num: int, reason: str, confidence: float, keywords: list = None, rules: list = None, violation_type: str = "其他"):
         """标记为拦截"""
         self.is_detected = True
         self.hit_layer = layer
         self.hit_layer_num = layer_num
         self.reason = reason
         self.confidence = confidence
+        self.violation_type = violation_type
         if keywords:
             self.matched_keywords = keywords
         if rules:
@@ -113,7 +115,7 @@ class RuleEngine:
             key_features = standard.get("detection_points", {}).get("key_features", [])
             for kw in key_features:
                 if kw and len(kw) > 1 and kw.lower() in content_lower:
-                    return result.block("L1_Keyword", 1, f"命中关键词: {kw}", 1.0, [kw], [rule_id])
+                    return result.block("L1_Keyword", 1, f"命中关键词: {kw}", 1.0, [kw], [rule_id], "敏感词命中")
         return result
 
     def _layer2_variants(self, content_clean: str, result: AuditResult) -> AuditResult:
@@ -122,14 +124,14 @@ class RuleEngine:
             all_variants = sum(variants.values(), []) 
             for var in all_variants:
                 if var and len(var) > 1 and var.lower() in content_clean:
-                    return result.block("L2_Variant", 2, f"命中变体词: {var}", 0.9, [var], [rule_id])
+                    return result.block("L2_Variant", 2, f"命中变体词: {var}", 0.9, [var], [rule_id], "变体词命中")
         return result
 
     def _layer3_regex(self, content: str, content_clean: str, result: AuditResult) -> AuditResult:
         for pattern in self.RISK_PATTERNS:
             try:
                 if re.search(pattern, content, re.IGNORECASE) or re.search(pattern, content_clean, re.IGNORECASE):
-                    return result.block("L3_Regex", 3, f"命中风险句式: {pattern}", 0.8, [pattern])
+                    return result.block("L3_Regex", 3, f"命中风险句式: {pattern}", 0.8, [pattern], violation_type="风险模式匹配")
             except re.error: continue
         return result
 
@@ -141,7 +143,7 @@ class RuleEngine:
                 pinyin_variants = standard.get("text_variants", {}).get("pinyin", [])
                 for pinyin_var in pinyin_variants:
                     if pinyin_var and len(pinyin_var) > 2 and pinyin_var in content_pinyin:
-                        return result.block("L4_Pinyin", 4, f"命中拼音变体: {pinyin_var}", 0.75, [pinyin_var], [rule_id])
+                        return result.block("L4_Pinyin", 4, f"命中拼音变体: {pinyin_var}", 0.75, [pinyin_var], [rule_id], "拼音绕过识别")
         except Exception: pass
         return result
 
@@ -181,7 +183,7 @@ class RuleEngine:
 
             llm_result = json.loads(llm_response)
             if llm_result.get("is_violation"):
-                return result.block("L5_Semantic", 5, f"LLM语义分析: {llm_result.get('reason', '未提供')}", 0.6, [llm_result.get("violation_type")])
+                return result.block("L5_Semantic", 5, f"LLM语义分析: {llm_result.get('reason', '未提供')}", 0.6, [llm_result.get("violation_type")], violation_type=llm_result.get("violation_type", "语义违规"))
         except Exception: pass
         return result
 
