@@ -1,4 +1,4 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen) v3.3.0
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v3.4.0
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 
@@ -49,10 +49,13 @@ A robust, deterministic rule engine that operates in 5 layers:
 ### 5. 🌐 Frontend Enhancements
 
 - **资料投喂 (Data Feeding) Window**: A dedicated section on the left side of the webpage for users to manually input attack materials, slang dictionaries, and bypass cases for agent learning.
-- **Version Display**: The current version number (v3.3.0) is displayed on the webpage.
-- **RAG-Enhanced Knowledge Base (v3.3.0)**: Integrated Retrieval-Augmented Generation for both attackers and defenders. Agents retrieve relevant bypass cases to refine attacks, while the inspector uses historical cases to boost detection accuracy.
-- **Automated Evaluation Reporting (v3.3.0)**: Automatically generates structured vulnerability analysis reports after battles, including detection rates, leakage analysis, and cross-version performance comparisons.
-- **False Positive Testing (v3.3.0)**: Systematic evaluation of moderation accuracy using benign content samples, targeting a false positive rate of <5%.
+- **Version Display**: The current version number (v3.4.0) is displayed on the webpage.
+- **False Positive Optimization (v3.4.0)**: Significant reduction in false positives (target <5%) through contextual analysis for slang, whitelist mechanisms, and confidence-based classification.
+- **Tiered Defense Architecture (v3.4.0)**: L1-L4 layers act as preliminary filters, while L5 (Semantic) performs final judgment for "gray area" content.
+- **Human-in-the-loop (HITL) Simulation (v3.4.0)**: Introduced "Pending Review" status for low-confidence detections, preventing outright blocks of ambiguous content.
+- **RAG-Enhanced Knowledge Base (v3.3.0)**: Integrated Retrieval-Augmented Generation for both attackers and defenders.
+- **Automated Evaluation Reporting (v3.3.0)**: Structured vulnerability analysis reports after battles.
+- **False Positive Testing (v3.3.0)**: Systematic evaluation of moderation accuracy using benign content samples.
 - **Enhanced Correlation Defense (v3.2.0)**: Account-based risk profiling (L0) and behavior sequence analysis (L_Behavior).
 - **Time-Dimension Simulation (v3.2.0)**: Hot event windows and rule decay tracking.
 - **Frontend 2.0 (v3.2.0)**: UI overhaul with platform selection and real-time Agent status tracking.

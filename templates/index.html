@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>数字孪生风控风洞 | v3.2.0 强化防御版</title>
+  <title>数字孪生风控风洞 | v3.4.0 误杀优化版</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/vue@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -21,21 +21,23 @@
     .agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; }
     .agent-card { background-color: #2a2a2a; border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #444; transition: all 0.3s; }
     .agent-card .status { font-size: 12px; padding: 2px 5px; border-radius: 3px; margin-top: 5px; display: inline-block; }
-    .status-idle { background-color: #555; } .status-crafting { background-color: #3a7ca5; } .status-blocked { background-color: #d9534f; } .status-retrying { background-color: #f0ad4e; } .status-success { background-color: #5cb85c; }
+    .status-idle { background-color: #555; } .status-crafting { background-color: #3a7ca5; } .status-blocked { background-color: #d9534f; } .status-pending { background-color: #8a2be2; } .status-retrying { background-color: #f0ad4e; } .status-success { background-color: #5cb85c; }
     .battle-log { flex: 1; background-color: #2a2a2a; margin-top: 20px; padding: 15px; border-radius: 8px; overflow-y: auto; }
     .log-entry { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #444; }
-    .retry-link { text-decoration: none; color: #f0ad4e; }
-    .retry-details { background-color: #333; padding: 5px; margin-top: 5px; border-radius: 4px; }
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px; }
+    .badge-pending { background-color: #8a2be2; color: white; }
+    .badge-success { background-color: #5cb85c; color: white; }
+    .badge-blocked { background-color: #d9534f; color: white; }
   </style>
 </head>
 <body>
   <div id="app" class="container">
     <div class="top-bar">
-      <div class="logo">风洞 v3.2.0</div>
+      <div class="logo">风洞 v3.4.0 <span style="font-size: 12px; font-weight: normal; color: #888;">(误杀优化版)</span></div>
       <div class="controls">
         <div class="control-group">
-          <label for="platform-select">平台:</label>
-          <select id="platform-select" v-model="platform" @change="setPlatform">
+          <label>平台:</label>
+          <select v-model="platform" @change="setPlatform">
             <option value="weibo">微博</option>
             <option value="douyin">抖音</option>
             <option value="xiaohongshu">小红书</option>
@@ -43,15 +45,19 @@
           </select>
         </div>
         <div class="control-group">
-          <label for="audit-mode-toggle">审核模式:</label>
-          <button id="audit-mode-toggle" @click="toggleAuditMode">{{ auditMode === 'pre_audit' ? '先审后发' : '先发后审' }}</button>
+          <label>审核模式:</label>
+          <button @click="toggleAuditMode">{{ auditMode === 'pre_audit' ? '先审后发' : '先发后审' }}</button>
         </div>
       </div>
     </div>
     <div class="main-content">
       <div class="left-panel">
         <h3>对抗配置</h3>
-        <!-- Battle config form -->
+        <div class="control-group">
+          <label>话题:</label>
+          <input type="text" v-model="targetTopic" style="background:#333; color:white; border:1px solid #555; padding:5px; width:100%;">
+        </div>
+        <button @click="startRandomBattle" style="margin-top:10px; width:100%; background:#444;">随机发起对抗</button>
       </div>
       <div class="center-panel">
         <h3>Agent 实时状态</h3>
@@ -64,45 +70,59 @@
         <div class="battle-log">
           <h3>对抗日志</h3>
           <div v-for="log in battleLogs" class="log-entry">
-            <div><strong>{{ log.persona_name }}</strong> {{ log.is_success ? '绕过成功' : '被拦截' }}</div>
-            <div v-if="log.retries_count > 0">
-              <a href="#" @click.prevent="log.showRetries = !log.showRetries" class="retry-link">重试 {{ log.retries_count }} 次</a>
-              <div v-if="log.showRetries" class="retry-details">
-                <div v-for="retry in log.retry_history">[{{ retry.retry_index }}] {{ retry.detected ? '被拦' : '成功' }} - {{ retry.hit_layer }}</div>
-              </div>
+            <div>
+              <strong>{{ log.persona_name }}</strong> 
+              <span v-if="log.is_success" class="badge badge-success">绕过成功</span>
+              <span v-else-if="log.is_pending" class="badge badge-pending">待人审 (阻断)</span>
+              <span v-else class="badge badge-blocked">拦截拦截</span>
+              <span style="font-size: 12px; color: #888; margin-left: 10px;">话题: {{ log.target_topic }}</span>
             </div>
+            <div style="font-size: 13px; margin-top: 5px; color: #ccc;">内容: {{ log.attack.content }}</div>
+            <div style="font-size: 12px; color: #888;">理由: {{ log.defense.reason }}</div>
           </div>
         </div>
       </div>
       <div class="right-panel">
-        <h3>系统统计</h3>
-        <!-- System stats -->
+        <h3>系统指标 (v3.4.0)</h3>
+        <div v-if="stats">
+          <div>总检测数: {{ stats.inspector.total_checked }}</div>
+          <div>拦截总数: {{ stats.inspector.total_detected }}</div>
+          <div>误杀控制: 5% 目标</div>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
     const { createApp, ref, onMounted } = Vue
-
     createApp({
       setup() {
         const platform = ref('weibo')
         const auditMode = ref('pre_audit')
         const agents = ref([])
         const battleLogs = ref([])
+        const targetTopic = ref('内容安全测试')
+        const stats = ref(null)
 
-        const fetchAgents = async () => {
+        const fetchStates = async () => {
           const res = await axios.get('/agents/states')
           agents.value = res.data.agents
+          auditMode.value = res.data.system_state.audit_mode
+          platform.value = res.data.system_state.platform
         }
 
         const fetchLogs = async () => {
           const res = await axios.get('/battle/history?limit=20')
-          battleLogs.value = res.data.history.map(l => ({ ...l, showRetries: false }))
+          battleLogs.value = res.data.history
+        }
+
+        const fetchStats = async () => {
+          const res = await axios.get('/system/stats')
+          stats.value = res.data
         }
 
         const setPlatform = async () => {
-          // Implement API call to set platform
+          await axios.post('/platform/set', { platform: platform.value })
         }
 
         const toggleAuditMode = async () => {
@@ -111,16 +131,24 @@
           auditMode.value = newMode
         }
 
-        onMounted(() => {
-          fetchAgents()
+        const startRandomBattle = async () => {
+          const randomAgent = agents.value[Math.floor(Math.random() * agents.value.length)]
+          await axios.post('/battle/start', { agent_id: randomAgent.persona.id, topic: targetTopic.value })
           fetchLogs()
+        }
+
+        onMounted(() => {
+          fetchStates()
+          fetchLogs()
+          fetchStats()
           setInterval(() => {
-            fetchAgents()
+            fetchStates()
             fetchLogs()
+            fetchStats()
           }, 5000)
         })
 
-        return { platform, auditMode, agents, battleLogs, setPlatform, toggleAuditMode }
+        return { platform, auditMode, agents, battleLogs, targetTopic, stats, setPlatform, toggleAuditMode, startRandomBattle }
       }
     }).mount('#app')
   </script>
