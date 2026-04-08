@@ -1,4 +1,8 @@
-# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.7.0
+# 🛡️ Digital Twin Risk System (3D Next-Gen) v2.7.0 (Rollback from v3.x)
+
+**Important Note on Version Rollback:**
+
+This repository has been reverted to version `v2.7.0` from `v3.x` due to significant performance issues encountered in the `v3.x` branch. We are re-evaluating the iteration roadmap starting from the stable `v2.7.0` release to ensure a robust and performant foundation for future development. We apologize for any inconvenience this may cause.
 
 > **A Multi-Agent Adversarial Simulation System for Content Safety**
 
